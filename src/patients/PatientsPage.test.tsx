@@ -1,19 +1,18 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import App from "../App";
 import { fakeBackend } from "../test/fakeBackend";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
   vi.mocked(open).mockReset();
-  vi.mocked(save).mockReset();
   vi.mocked(check).mockReset().mockResolvedValue(null);
 });
 
@@ -142,20 +141,24 @@ test("patient mineur : badge et représentants légaux", async () => {
   expect(state.patients[0].guardian_consent_date).toBe("2026-10-01");
 });
 
-test("export RGPD vers le fichier choisi", async () => {
+test("export RGPD dans le dossier choisi", async () => {
   const { user } = await setup();
   await createPatient(user, "Dupont", "Anne");
-  vi.mocked(save).mockResolvedValue("/Users/x/dossier.json");
+  vi.mocked(open).mockResolvedValue("/Users/x/Exports");
   await user.click(
     screen.getByRole("button", { name: "Exporter le dossier (RGPD)" }),
   );
 
-  expect(await screen.findByText("Dossier exporté.")).toBeInTheDocument();
-  expect(save).toHaveBeenCalledWith(
-    expect.objectContaining({ defaultPath: "dossier-Dupont-Anne.json" }),
+  expect(
+    await screen.findByText(
+      "Dossier exporté dans /Users/x/Exports/dossier-export",
+    ),
+  ).toBeInTheDocument();
+  expect(open).toHaveBeenCalledWith(
+    expect.objectContaining({ directory: true }),
   );
   expect(invoke).toHaveBeenCalledWith("export_patient", {
     id: 1,
-    path: "/Users/x/dossier.json",
+    folder: "/Users/x/Exports",
   });
 });

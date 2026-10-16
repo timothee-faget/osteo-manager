@@ -1,3 +1,4 @@
+pub mod attachments;
 pub mod backup;
 pub mod db;
 pub mod patients;
@@ -70,6 +71,10 @@ pub fn run() {
             patients::create_patient,
             patients::update_patient,
             patients::export_patient,
+            attachments::list_attachments,
+            attachments::add_attachments,
+            attachments::read_attachment,
+            attachments::delete_attachment,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

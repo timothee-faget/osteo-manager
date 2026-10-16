@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 
 export type Civility = "mme" | "m";
 
@@ -88,16 +88,17 @@ export const patientsApi = {
     invoke<Patient>("create_patient", { patient }),
   update: (id: number, patient: PatientInput) =>
     invoke<Patient>("update_patient", { id, patient }),
-  /** Asks where to save; `false` if the user cancels. */
-  export: async (p: Patient) => {
-    const path = await save({
-      title: "Exporter le dossier",
-      defaultPath: `dossier-${p.last_name}-${p.first_name}.json`,
-      filters: [{ name: "JSON", extensions: ["json"] }],
+  /**
+   * Asks for a destination folder and creates the patient's export folder in it.
+   * Returns its path, or `null` if the user cancels.
+   */
+  export: async (id: number) => {
+    const folder = await open({
+      title: "Exporter le dossier dans…",
+      directory: true,
     });
-    if (!path) return false;
-    await invoke<void>("export_patient", { id: p.id, path });
-    return true;
+    if (!folder) return null;
+    return invoke<string>("export_patient", { id, folder });
   },
 };
 

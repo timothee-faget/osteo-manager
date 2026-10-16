@@ -109,6 +109,10 @@ impl Session {
         self.dir.join(backup::VAULT)
     }
 
+    pub fn attachments_dir(&self) -> PathBuf {
+        self.dir.join(backup::ATTACHMENTS)
+    }
+
     fn db_path(&self) -> PathBuf {
         self.dir.join(backup::DB)
     }

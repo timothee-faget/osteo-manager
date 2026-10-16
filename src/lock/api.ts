@@ -33,6 +33,12 @@ const MESSAGES: Record<string, string> = {
   invalid_guardian_name: "Le nom du représentant légal est obligatoire.",
   invalid_guardian_email: "E-mail du représentant légal invalide.",
   invalid_patient: "Patient introuvable.",
+  invalid_attachment_type:
+    "Format non pris en charge : images (JPEG, PNG, HEIC…) ou PDF uniquement.",
+  invalid_attachment_size: "Fichier trop volumineux (50 Mo maximum).",
+  invalid_attachment: "Pièce jointe introuvable.",
+  invalid_attachment_file:
+    "Le fichier de la pièce jointe est illisible ou endommagé.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */
