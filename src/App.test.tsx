@@ -2,11 +2,13 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
 import App from "./App";
 import type { LockStatus } from "./lock/api";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
 
 const RECOVERY_KEY = "ABCD-0000-0000-0000-0000-0000-0000-0000";
 
@@ -47,6 +49,7 @@ function fakeBackend(initial: LockStatus) {
         state.autoLock = Number(a.minutes);
         return;
       case "print_page":
+      case "restart":
         return;
       case "backup_status":
         return {
@@ -74,6 +77,7 @@ function fakeBackend(initial: LockStatus) {
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
   vi.mocked(open).mockReset();
+  vi.mocked(check).mockReset().mockResolvedValue(null);
 });
 
 test("premier lancement : création du mot de passe puis clé de récupération", async () => {
@@ -284,4 +288,32 @@ test("un fichier invalide affiche une erreur", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Ce fichier n'est pas une sauvegarde valide.",
   );
+});
+
+test("propose la mise à jour disponible puis redémarre", async () => {
+  const user = userEvent.setup();
+  fakeBackend("locked");
+  const downloadAndInstall = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(check).mockResolvedValue({
+    version: "0.2.0",
+    downloadAndInstall,
+  } as unknown as Awaited<ReturnType<typeof check>>);
+  render(<App />);
+
+  expect(
+    await screen.findByText("La version 0.2.0 d'Osteo Manager est disponible."),
+  ).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Installer et redémarrer" }),
+  );
+  expect(downloadAndInstall).toHaveBeenCalled();
+  expect(invoke).toHaveBeenCalledWith("restart");
+});
+
+test("une vérification de mise à jour en échec ne gêne pas", async () => {
+  fakeBackend("locked");
+  vi.mocked(check).mockRejectedValue(new Error("offline"));
+  render(<App />);
+  expect(await screen.findByLabelText("Mot de passe")).toBeInTheDocument();
+  expect(screen.queryByText(/est disponible/)).not.toBeInTheDocument();
 });

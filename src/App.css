@@ -86,3 +86,13 @@ button.link {
     color: #000;
   }
 }
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: #e3f2fd;
+  color: #0d47a1;
+}
