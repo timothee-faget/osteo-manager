@@ -11,6 +11,41 @@ pub const KEY_LEN: usize = 32;
 pub const MIGRATIONS: &[&str] = &[
     // v1: app preferences (auto-lock delay…)
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;",
+    // v2: practitioner identity, practice locations, fees and provision rates.
+    // Money in cents, rates in basis points (45 % = 4500).
+    "CREATE TABLE practitioner (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        last_name TEXT NOT NULL DEFAULT '',
+        first_name TEXT NOT NULL DEFAULT '',
+        rpps TEXT NOT NULL DEFAULT '',
+        adeli TEXT NOT NULL DEFAULT '',
+        siret TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        phone TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT '',
+        logo BLOB,
+        logo_mime TEXT
+    ) STRICT;
+    INSERT INTO practitioner (id) VALUES (1);
+
+    CREATE TABLE practice_location (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('practice', 'home_visit', 'company')),
+        address TEXT NOT NULL DEFAULT '',
+        retrocession_rate_bp INTEGER NOT NULL DEFAULT 0
+            CHECK (retrocession_rate_bp BETWEEN 0 AND 10000),
+        archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+    ) STRICT;
+
+    CREATE TABLE billing_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        standard_fee_cents INTEGER NOT NULL CHECK (standard_fee_cents >= 0),
+        home_visit_fee_cents INTEGER NOT NULL CHECK (home_visit_fee_cents >= 0),
+        tax_provision_bp INTEGER NOT NULL CHECK (tax_provision_bp BETWEEN 0 AND 10000),
+        urssaf_provision_bp INTEGER NOT NULL CHECK (urssaf_provision_bp BETWEEN 0 AND 10000)
+    ) STRICT;
+    INSERT INTO billing_settings VALUES (1, 6000, 6000, 4500, 2600);",
 ];
 
 #[derive(Debug, thiserror::Error)]

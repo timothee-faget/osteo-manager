@@ -1,7 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { BackupSettings } from "./backup/BackupSettings";
-import { errorMessage, lockApi } from "./lock/api";
+import { useEffect, useState } from "react";
+import { lockApi } from "./lock/api";
 import { useIdle } from "./lock/useIdle";
+import { SettingsPage } from "./settings/SettingsPage";
+
+type Page = "home" | "settings";
+
+const PAGES: Record<Page, string> = { home: "Accueil", settings: "Paramètres" };
 
 function Home({
   onLock,
@@ -10,55 +14,49 @@ function Home({
   onLock: () => void;
   onRestored: () => void;
 }) {
+  const [page, setPage] = useState<Page>("home");
   const [autoLock, setAutoLock] = useState<number | null>(null);
-  const [draft, setDraft] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    void lockApi.autoLockMinutes().then((minutes) => {
-      setAutoLock(minutes);
-      setDraft(String(minutes));
-    });
+    void lockApi.autoLockMinutes().then(setAutoLock);
   }, []);
 
   useIdle(autoLock, onLock);
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    const minutes = Number(draft);
-    try {
-      await lockApi.setAutoLockMinutes(minutes);
-      setAutoLock(minutes);
-      setMessage("Délai enregistré.");
-    } catch (err) {
-      setMessage(errorMessage(err));
-    }
-  }
-
   return (
-    <main className="container">
-      <header>
+    <>
+      <header className="topbar">
         <h1>Osteo Manager</h1>
+        <nav>
+          {(Object.keys(PAGES) as Page[]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              aria-current={page === p ? "page" : undefined}
+              onClick={() => setPage(p)}
+            >
+              {PAGES[p]}
+            </button>
+          ))}
+        </nav>
         <button type="button" onClick={onLock}>
           Verrouiller
         </button>
       </header>
-      <form onSubmit={(e) => void save(e)}>
-        <label>
-          Verrouillage automatique après (minutes)
-          <input
-            type="number"
-            min={1}
-            max={120}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-        </label>
-        <button type="submit">Enregistrer</button>
-        {message && <p role="status">{message}</p>}
-      </form>
-      <BackupSettings onRestored={onRestored} />
-    </main>
+      <main className="container">
+        {page === "home" ? (
+          <p>Le tableau de bord arrivera avec la comptabilité.</p>
+        ) : (
+          autoLock !== null && (
+            <SettingsPage
+              autoLock={autoLock}
+              onAutoLockChange={setAutoLock}
+              onRestored={onRestored}
+            />
+          )
+        )}
+      </main>
+    </>
   );
 }
 

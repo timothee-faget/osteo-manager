@@ -1,6 +1,7 @@
 pub mod backup;
 pub mod db;
 pub mod session;
+pub mod settings;
 pub mod vault;
 
 use std::sync::Mutex;
@@ -52,6 +53,17 @@ pub fn run() {
             session::restore_backup,
             session::print_page,
             session::restart,
+            settings::get_practitioner,
+            settings::update_practitioner,
+            settings::get_logo,
+            settings::update_logo,
+            settings::remove_logo,
+            settings::list_locations,
+            settings::add_location,
+            settings::edit_location,
+            settings::archive_location,
+            settings::get_billing_settings,
+            settings::update_billing_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

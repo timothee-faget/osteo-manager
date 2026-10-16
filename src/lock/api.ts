@@ -15,6 +15,17 @@ const MESSAGES: Record<string, string> = {
   folder_not_found:
     "Dossier de sauvegarde introuvable : le disque est-il branché ?",
   backup_failed: "La sauvegarde a échoué.",
+  invalid_rpps: "Le numéro RPPS doit comporter 11 chiffres.",
+  invalid_adeli: "Le numéro ADELI doit comporter 9 caractères.",
+  invalid_siret: "Numéro SIRET invalide : 14 chiffres attendus.",
+  invalid_email: "Adresse e-mail invalide.",
+  invalid_logo: "Le logo doit être une image PNG ou JPEG de 1 Mo maximum.",
+  invalid_name: "Le nom est obligatoire.",
+  invalid_retrocession_rate: "Le taux doit être compris entre 0 et 100 %.",
+  invalid_standard_fee: "Le tarif ne peut pas être négatif.",
+  invalid_home_visit_fee: "Le tarif ne peut pas être négatif.",
+  invalid_tax_provision: "Le taux doit être compris entre 0 et 100 %.",
+  invalid_urssaf_provision: "Le taux doit être compris entre 0 et 100 %.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */
