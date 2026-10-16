@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
-use crate::attachments;
 use crate::session::{SessionError, State};
 use crate::settings::is_plausible_email;
+use crate::{attachments, invoices, sessions};
 
 type Result<T> = std::result::Result<T, SessionError>;
 
@@ -429,12 +429,13 @@ pub fn list(conn: &Connection, query: &str, today: NaiveDate) -> Result<Vec<Pati
 }
 
 /// The full record, for the patient's right of access and portability (GDPR art. 15 and 20).
-/// Sessions and invoices will join it as those modules land.
 pub fn export(conn: &Connection, id: i64, today: NaiveDate) -> Result<serde_json::Value> {
     Ok(serde_json::json!({
         "format": "osteo-manager/patient-export/v1",
         "exported_at": now(),
         "patient": get(conn, id, today)?,
+        "sessions": sessions::list_for_patient(conn, id)?,
+        "invoices": invoices::list_for_patient(conn, id)?,
         "attachments": attachments::list(conn, id)?,
     }))
 }

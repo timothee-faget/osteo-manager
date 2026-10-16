@@ -10,6 +10,7 @@ import {
 } from "./api";
 import { AttachmentsSection } from "./AttachmentsSection";
 import { PatientForm } from "./PatientForm";
+import { SessionsSection } from "./SessionsSection";
 
 type View = { kind: "list" } | { kind: "new" } | { kind: "edit"; id: number };
 
@@ -166,6 +167,7 @@ function PatientRecord({ id, onBack }: { id: number; onBack: () => void }) {
           return p;
         }}
       />
+      <SessionsSection patientId={patient.id} />
       <AttachmentsSection patientId={patient.id} />
     </section>
   );

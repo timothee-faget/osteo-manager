@@ -215,7 +215,7 @@ pub fn locations(conn: &Connection) -> Result<Vec<PracticeLocation>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-fn location(conn: &Connection, id: i64) -> Result<PracticeLocation> {
+pub(crate) fn location(conn: &Connection, id: i64) -> Result<PracticeLocation> {
     Ok(conn.query_row(
         &format!("SELECT {LOCATION_COLUMNS} FROM practice_location WHERE id = ?1"),
         [id],

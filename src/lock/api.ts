@@ -39,6 +39,19 @@ const MESSAGES: Record<string, string> = {
   invalid_attachment: "Pièce jointe introuvable.",
   invalid_attachment_file:
     "Le fichier de la pièce jointe est illisible ou endommagé.",
+  invalid_starts_at: "Date et heure invalides.",
+  invalid_fee: "Le tarif ne peut pas être négatif.",
+  invalid_fee_format:
+    "Tarif invalide : saisissez un montant, par exemple 60 ou 60,50.",
+  invalid_location: "Choisissez un lieu d'exercice actif.",
+  invalid_session: "Séance introuvable.",
+  invalid_session_invoiced:
+    "Cette séance est déjà facturée : le patient, le lieu, la date et le tarif ne peuvent plus changer.",
+  invalid_practitioner_incomplete:
+    "Complétez d'abord l'identité de la praticienne dans Paramètres (nom, prénom, RPPS, SIRET, adresse).",
+  invalid_location_address_missing:
+    "Ce lieu n'a pas d'adresse : ajoutez-la dans Paramètres avant de facturer.",
+  invalid_invoice: "Facture introuvable.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */

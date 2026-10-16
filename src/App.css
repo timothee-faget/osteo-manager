@@ -221,3 +221,18 @@ summary {
   height: 80vh;
   border: 1px solid #d0d7de;
 }
+
+.session-form {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+.actions,
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
