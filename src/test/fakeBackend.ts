@@ -10,6 +10,7 @@ import type {
 import type { Patient } from "../patients/api";
 import type { Attachment } from "../patients/attachmentsApi";
 import type { Session } from "../patients/sessionsApi";
+import type { InvoiceView } from "../invoices/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -46,6 +47,8 @@ export function fakeBackend(initial: LockStatus) {
     nextAttachmentId: 1,
     sessions: [] as Session[],
     invoiceSeq: 0,
+    invoices: [] as InvoiceView[],
+    creditSeq: 0,
   };
   const fold = (x: string) =>
     x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -254,6 +257,33 @@ export function fakeBackend(initial: LockStatus) {
         x.validated_at = "2026-10-16T10:05:00";
         x.invoice_number = `2026-10-${String(state.invoiceSeq).padStart(3, "0")}`;
         return x;
+      }
+      case "list_invoices":
+        return [...state.invoices].reverse();
+      case "get_invoice_pdf":
+      case "get_credit_note_pdf":
+        return new Uint8Array([37, 80, 68, 70]).buffer;
+      case "save_invoice_pdf":
+      case "save_credit_note_pdf":
+        return;
+      case "set_invoice_sent": {
+        const i = state.invoices.find((x) => x.id === a.id)!;
+        i.sent_at = a.sent ? "2026-10-16T18:00:00" : null;
+        return i;
+      }
+      case "cancel_invoice": {
+        const i = state.invoices.find((x) => x.id === a.id)!;
+        if (i.credit_note) throw { code: "invalid_invoice_cancelled" };
+        state.creditSeq += 1;
+        i.credit_note = {
+          id: state.creditSeq,
+          number: `AV-2026-10-${String(state.creditSeq).padStart(3, "0")}`,
+          invoice_id: i.id,
+          issued_on: "2026-10-20",
+          amount_cents: i.amount_cents,
+          reason: a.reason.trim(),
+        };
+        return i;
       }
       case "delete_attachment":
         state.attachments = state.attachments.filter((x) => x.id !== a.id);

@@ -52,7 +52,9 @@ fn now() -> String {
 const COLUMNS: &str = "s.id, s.patient_id, s.location_id, s.starts_at, s.reason, s.anamnesis,
     s.examination, s.treatment, s.advice, s.fee_cents, s.validated_at, i.number,
     s.created_at, s.updated_at";
-const FROM: &str = "session s LEFT JOIN invoice i ON i.session_id = s.id";
+/// Joins the session's current (non-cancelled) invoice, if any.
+const FROM: &str = "session s LEFT JOIN invoice i ON i.session_id = s.id
+    AND NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)";
 
 fn from_row(r: &Row) -> rusqlite::Result<Session> {
     Ok(Session {
@@ -209,9 +211,16 @@ pub fn update(conn: &Connection, id: i64, input: &SessionInput) -> Result<Sessio
     get(conn, id)
 }
 
-/// Only drafts can be deleted; an invoiced session is part of the accounts.
+/// Only sessions never invoiced can be deleted; the others are part of the accounts,
+/// even once their invoice is cancelled.
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
-    if get(conn, id)?.validated_at.is_some() {
+    get(conn, id)?;
+    let invoiced = conn
+        .query_row("SELECT 1 FROM invoice WHERE session_id = ?1", [id], |_| {
+            Ok(())
+        })
+        .optional()?;
+    if invoiced.is_some() {
         return Err(SessionError::Invalid("session_invoiced"));
     }
     conn.execute("DELETE FROM session WHERE id = ?1", [id])?;
@@ -224,11 +233,12 @@ pub fn validate(conn: &mut Connection, id: i64, today: NaiveDate) -> Result<(Ses
     if get(&tx, id)?.validated_at.is_some() {
         return Err(SessionError::Invalid("session_invoiced"));
     }
-    let invoice = invoices::issue(&tx, id, today)?;
+    // Marked first: once the invoice exists, the trigger locks the session's billing fields.
     tx.execute(
         "UPDATE session SET validated_at = ?1, updated_at = ?1 WHERE id = ?2",
         params![now(), id],
     )?;
+    let invoice = invoices::issue(&tx, id, today)?;
     tx.commit()?;
     Ok((get(conn, id)?, invoice))
 }
@@ -605,5 +615,155 @@ mod tests {
                 .is_err()
         );
         assert_eq!(invoices::get(&f.conn, invoice.id).unwrap(), invoice);
+    }
+
+    #[test]
+    fn credit_note_cancels_the_invoice_and_frees_the_session() {
+        let mut f = fixture();
+        let s = f.session("2026-10-16T09:00");
+        let (_, invoice) = f.validate(s.id, "2026-10-16").unwrap();
+
+        let cn = invoices::cancel(
+            &mut f.conn,
+            invoice.id,
+            " Erreur de tarif ",
+            day("2026-10-20"),
+        )
+        .unwrap();
+        assert_eq!(cn.number, "AV-2026-10-001");
+        assert_eq!(
+            (cn.amount_cents, cn.reason.as_str()),
+            (6000, "Erreur de tarif")
+        );
+
+        // The session is a draft again: it can be corrected and invoiced under a new number.
+        let draft = get(&f.conn, s.id).unwrap();
+        assert_eq!(
+            (
+                draft.validated_at.as_deref(),
+                draft.invoice_number.as_deref()
+            ),
+            (None, None)
+        );
+        let mut i = draft.data.clone();
+        i.fee_cents = 5000;
+        update(&f.conn, s.id, &i).unwrap();
+        let (again, second) = f.validate(s.id, "2026-10-20").unwrap();
+        assert_eq!(second.number, "2026-10-002");
+        assert_eq!(second.amount_cents, 5000);
+        assert_eq!(again.invoice_number.as_deref(), Some("2026-10-002"));
+
+        let views = invoices::list_for_patient(&f.conn, f.patient).unwrap();
+        assert_eq!(views.len(), 2);
+        assert_eq!(views[0].invoice.number, "2026-10-002");
+        assert!(views[0].credit_note.is_none());
+        assert_eq!(
+            views[1].credit_note.as_ref().unwrap().number,
+            "AV-2026-10-001"
+        );
+        // A session with a (cancelled) invoice stays in the accounts.
+        assert_eq!(invalid_field(delete(&f.conn, s.id)), "session_invoiced");
+    }
+
+    #[test]
+    fn an_invoice_is_cancelled_only_once_and_credit_notes_are_immutable() {
+        let mut f = fixture();
+        let s = f.session("2026-10-16T09:00");
+        let (_, invoice) = f.validate(s.id, "2026-10-16").unwrap();
+        let cn = invoices::cancel(&mut f.conn, invoice.id, "", day("2026-10-16")).unwrap();
+        assert_eq!(
+            invalid_field(invoices::cancel(
+                &mut f.conn,
+                invoice.id,
+                "",
+                day("2026-10-16")
+            )),
+            "invoice_cancelled"
+        );
+        assert!(
+            f.conn
+                .execute(
+                    "UPDATE credit_note SET amount_cents = 1 WHERE id = ?1",
+                    [cn.id]
+                )
+                .is_err()
+        );
+        assert!(
+            f.conn
+                .execute("DELETE FROM credit_note WHERE id = ?1", [cn.id])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn credit_notes_have_their_own_monthly_series() {
+        let mut f = fixture();
+        let mut numbers = Vec::new();
+        for (session_day, cancelled_on) in [
+            ("2026-10-01", "2026-10-05"),
+            ("2026-10-02", "2026-10-06"),
+            ("2026-10-03", "2026-11-02"),
+        ] {
+            let s = f.session(&format!("{session_day}T10:00"));
+            let (_, inv) = f.validate(s.id, session_day).unwrap();
+            numbers.push(
+                invoices::cancel(&mut f.conn, inv.id, "", day(cancelled_on))
+                    .unwrap()
+                    .number,
+            );
+        }
+        assert_eq!(
+            numbers,
+            ["AV-2026-10-001", "AV-2026-10-002", "AV-2026-11-001"]
+        );
+    }
+
+    #[test]
+    fn sending_status_can_be_set_and_cleared() {
+        let mut f = fixture();
+        let s = f.session("2026-10-16T09:00");
+        let (_, invoice) = f.validate(s.id, "2026-10-16").unwrap();
+        assert_eq!(
+            invoices::get_view(&f.conn, invoice.id).unwrap().sent_at,
+            None
+        );
+        assert!(
+            invoices::set_sent(&f.conn, invoice.id, true)
+                .unwrap()
+                .sent_at
+                .is_some()
+        );
+        assert_eq!(
+            invoices::set_sent(&f.conn, invoice.id, false)
+                .unwrap()
+                .sent_at,
+            None
+        );
+        assert_eq!(
+            invalid_field(invoices::set_sent(&f.conn, 999, true)),
+            "invoice"
+        );
+    }
+
+    #[test]
+    fn pdfs_render_from_the_database() {
+        let mut f = fixture();
+        let s = f.session("2026-10-16T09:00");
+        let (_, invoice) = f.validate(s.id, "2026-10-16").unwrap();
+        assert!(
+            invoices::invoice_pdf(&f.conn, invoice.id)
+                .unwrap()
+                .starts_with(b"%PDF-")
+        );
+        let cn = invoices::cancel(&mut f.conn, invoice.id, "", day("2026-10-16")).unwrap();
+        assert!(
+            invoices::credit_note_pdf(&f.conn, cn.id)
+                .unwrap()
+                .starts_with(b"%PDF-")
+        );
+        assert_eq!(
+            invalid_field(invoices::invoice_pdf(&f.conn, 999)),
+            "invoice"
+        );
     }
 }

@@ -155,6 +155,82 @@ pub const MIGRATIONS: &[&str] = &[
         BEGIN SELECT RAISE(ABORT, 'invoices are immutable'); END;
     CREATE TRIGGER invoice_undeletable BEFORE DELETE ON invoice
         BEGIN SELECT RAISE(ABORT, 'invoices cannot be deleted'); END;",
+    // v6: credit notes and sending status. A session whose invoice is cancelled can be
+    // corrected and invoiced again, so `invoice.session_id` is no longer unique (the table
+    // is rebuilt, data kept); only one non-cancelled invoice per session is allowed.
+    "DROP TRIGGER invoice_immutable;
+    DROP TRIGGER invoice_undeletable;
+    DROP TRIGGER session_billing_locked;
+    CREATE TABLE invoice_v6 (
+        id INTEGER PRIMARY KEY,
+        number TEXT NOT NULL UNIQUE,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+        seq INTEGER NOT NULL CHECK (seq >= 1),
+        session_id INTEGER NOT NULL REFERENCES session (id),
+        patient_id INTEGER NOT NULL REFERENCES patient (id),
+        issued_on TEXT NOT NULL,
+        service_date TEXT NOT NULL,
+        label TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+        practitioner_name TEXT NOT NULL,
+        practitioner_rpps TEXT NOT NULL,
+        practitioner_adeli TEXT NOT NULL,
+        practitioner_siret TEXT NOT NULL,
+        practitioner_address TEXT NOT NULL,
+        practitioner_phone TEXT NOT NULL,
+        practitioner_email TEXT NOT NULL,
+        location_name TEXT NOT NULL,
+        location_address TEXT NOT NULL,
+        patient_civility TEXT,
+        patient_name TEXT NOT NULL,
+        patient_address TEXT NOT NULL,
+        UNIQUE (year, month, seq)
+    ) STRICT;
+    INSERT INTO invoice_v6 SELECT * FROM invoice;
+    DROP TABLE invoice;
+    ALTER TABLE invoice_v6 RENAME TO invoice;
+    CREATE INDEX invoice_patient ON invoice (patient_id);
+    CREATE INDEX invoice_session ON invoice (session_id);
+    CREATE TRIGGER invoice_immutable BEFORE UPDATE ON invoice
+        BEGIN SELECT RAISE(ABORT, 'invoices are immutable'); END;
+    CREATE TRIGGER invoice_undeletable BEFORE DELETE ON invoice
+        BEGIN SELECT RAISE(ABORT, 'invoices cannot be deleted'); END;
+
+    -- Cancels a whole invoice. Own continuous series per month of issue: AV-AAAA-MM-NNN.
+    CREATE TABLE credit_note (
+        id INTEGER PRIMARY KEY,
+        number TEXT NOT NULL UNIQUE,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+        seq INTEGER NOT NULL CHECK (seq >= 1),
+        invoice_id INTEGER NOT NULL UNIQUE REFERENCES invoice (id),
+        issued_on TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+        reason TEXT NOT NULL DEFAULT '',
+        UNIQUE (year, month, seq)
+    ) STRICT;
+    CREATE TRIGGER credit_note_immutable BEFORE UPDATE ON credit_note
+        BEGIN SELECT RAISE(ABORT, 'credit notes are immutable'); END;
+    CREATE TRIGGER credit_note_undeletable BEFORE DELETE ON credit_note
+        BEGIN SELECT RAISE(ABORT, 'credit notes cannot be deleted'); END;
+
+    -- Mutable status, kept out of the immutable invoice row.
+    CREATE TABLE invoice_sending (
+        invoice_id INTEGER PRIMARY KEY REFERENCES invoice (id),
+        sent_at TEXT NOT NULL
+    ) STRICT;
+
+    -- Billing fields stay locked while the session has a non-cancelled invoice.
+    CREATE TRIGGER session_billing_locked BEFORE UPDATE ON session
+        WHEN EXISTS (
+            SELECT 1 FROM invoice i WHERE i.session_id = OLD.id
+            AND NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)
+        ) AND (
+            NEW.patient_id IS NOT OLD.patient_id OR NEW.location_id IS NOT OLD.location_id
+            OR NEW.starts_at IS NOT OLD.starts_at OR NEW.fee_cents IS NOT OLD.fee_cents
+            OR NEW.validated_at IS NOT OLD.validated_at)
+        BEGIN SELECT RAISE(ABORT, 'invoiced session billing fields are locked'); END;",
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -327,5 +403,39 @@ mod tests {
                 supported: 1
             }
         ));
+    }
+
+    #[test]
+    fn v6_keeps_v5_invoices_and_their_protection() {
+        let (_dir, path) = db_path();
+        let conn = open_with(&path, &KEY, &MIGRATIONS[..5]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO patient (id, last_name, first_name, created_at, updated_at)
+                VALUES (1, 'Dupont', 'Anne', 't', 't');
+             INSERT INTO practice_location (id, name, kind) VALUES (1, 'Cabinet', 'practice');
+             INSERT INTO session (id, patient_id, location_id, starts_at, fee_cents, validated_at,
+                created_at, updated_at)
+                VALUES (1, 1, 1, '2026-10-16T09:00', 6000, 't', 't', 't');
+             INSERT INTO invoice VALUES (1, '2026-10-001', 2026, 10, 1, 1, 1, '2026-10-16',
+                '2026-10-16', 'Consultation', 6000, 'C M', 'r', '', 's', 'a', '', '', 'Cabinet',
+                'adr', 'mme', 'Anne Dupont', '');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let conn = open_with(&path, &KEY, MIGRATIONS).unwrap();
+        let number: String = conn
+            .query_row("SELECT number FROM invoice WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(number, "2026-10-001");
+        assert!(
+            conn.execute("UPDATE invoice SET amount_cents = 1", [])
+                .is_err()
+        );
+        assert!(conn.execute("DELETE FROM invoice", []).is_err());
+        assert!(
+            conn.execute("UPDATE session SET fee_cents = 1", [])
+                .is_err()
+        );
     }
 }

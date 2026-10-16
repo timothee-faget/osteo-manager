@@ -3,6 +3,7 @@ pub mod backup;
 pub mod db;
 pub mod invoices;
 pub mod patients;
+pub mod pdf;
 pub mod session;
 pub mod sessions;
 pub mod settings;
@@ -83,6 +84,13 @@ pub fn run() {
             sessions::update_session,
             sessions::delete_session,
             sessions::validate_session,
+            invoices::list_invoices,
+            invoices::get_invoice_pdf,
+            invoices::save_invoice_pdf,
+            invoices::get_credit_note_pdf,
+            invoices::save_credit_note_pdf,
+            invoices::cancel_invoice,
+            invoices::set_invoice_sent,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

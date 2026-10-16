@@ -3,12 +3,19 @@
 //! Numbers are `AAAA-MM-NNN`: a continuous series per month of issue, assigned in the
 //! issuing transaction. An invoice stores a snapshot of everything printed on it, so later
 //! edits to the practitioner, location or patient never change an issued invoice. Database
-//! triggers forbid updating or deleting invoices; corrections go through credit notes.
+//! triggers forbid updating or deleting invoices; corrections go through credit notes,
+//! which cancel a whole invoice (own series `AV-AAAA-MM-NNN`) and free the session to be
+//! corrected and invoiced again.
 
-use chrono::{Datelike, NaiveDate};
+use std::path::PathBuf;
+
+use chrono::{Datelike, Local, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Row, params};
+
+use crate::session::State;
 use serde::Serialize;
 
+use crate::pdf;
 use crate::session::SessionError;
 use crate::settings::{self, LocationKind};
 
@@ -40,6 +47,26 @@ pub struct Invoice {
     pub patient_civility: Option<String>,
     pub patient_name: String,
     pub patient_address: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CreditNote {
+    pub id: i64,
+    pub number: String,
+    pub invoice_id: i64,
+    /// `YYYY-MM-DD`
+    pub issued_on: String,
+    pub amount_cents: i64,
+    pub reason: String,
+}
+
+/// An invoice with its current status.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct InvoiceView {
+    #[serde(flatten)]
+    pub invoice: Invoice,
+    pub sent_at: Option<String>,
+    pub credit_note: Option<CreditNote>,
 }
 
 /// `2026-04-012`; the sequence widens past 999 rather than wrapping.
@@ -87,13 +114,144 @@ pub fn get(conn: &Connection, id: i64) -> Result<Invoice> {
     .ok_or(SessionError::Invalid("invoice"))
 }
 
-/// Newest first.
-pub fn list_for_patient(conn: &Connection, patient_id: i64) -> Result<Vec<Invoice>> {
+fn view(conn: &Connection, invoice: Invoice) -> Result<InvoiceView> {
+    let sent_at = conn
+        .query_row(
+            "SELECT sent_at FROM invoice_sending WHERE invoice_id = ?1",
+            [invoice.id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let credit_note = credit_note_for(conn, invoice.id)?;
+    Ok(InvoiceView {
+        invoice,
+        sent_at,
+        credit_note,
+    })
+}
+
+fn list_where(
+    conn: &Connection,
+    filter: &str,
+    params: &[&dyn rusqlite::ToSql],
+) -> Result<Vec<InvoiceView>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUMNS} FROM invoice WHERE patient_id = ?1 ORDER BY year DESC, month DESC, seq DESC"
+        "SELECT {COLUMNS} FROM invoice {filter} ORDER BY year DESC, month DESC, seq DESC"
     ))?;
-    let rows = stmt.query_map([patient_id], from_row)?;
-    Ok(rows.collect::<rusqlite::Result<_>>()?)
+    let invoices = stmt
+        .query_map(params, from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    invoices.into_iter().map(|i| view(conn, i)).collect()
+}
+
+/// Newest first.
+pub fn list_all(conn: &Connection) -> Result<Vec<InvoiceView>> {
+    list_where(conn, "", &[])
+}
+
+/// Newest first.
+pub fn list_for_patient(conn: &Connection, patient_id: i64) -> Result<Vec<InvoiceView>> {
+    list_where(conn, "WHERE patient_id = ?1", &[&patient_id])
+}
+
+pub fn get_view(conn: &Connection, id: i64) -> Result<InvoiceView> {
+    view(conn, get(conn, id)?)
+}
+
+fn credit_note_from_row(r: &Row) -> rusqlite::Result<CreditNote> {
+    Ok(CreditNote {
+        id: r.get(0)?,
+        number: r.get(1)?,
+        invoice_id: r.get(2)?,
+        issued_on: r.get(3)?,
+        amount_cents: r.get(4)?,
+        reason: r.get(5)?,
+    })
+}
+
+const CREDIT_NOTE_COLUMNS: &str = "id, number, invoice_id, issued_on, amount_cents, reason";
+
+fn credit_note_for(conn: &Connection, invoice_id: i64) -> Result<Option<CreditNote>> {
+    Ok(conn
+        .query_row(
+            &format!("SELECT {CREDIT_NOTE_COLUMNS} FROM credit_note WHERE invoice_id = ?1"),
+            [invoice_id],
+            credit_note_from_row,
+        )
+        .optional()?)
+}
+
+pub fn get_credit_note(conn: &Connection, id: i64) -> Result<CreditNote> {
+    conn.query_row(
+        &format!("SELECT {CREDIT_NOTE_COLUMNS} FROM credit_note WHERE id = ?1"),
+        [id],
+        credit_note_from_row,
+    )
+    .optional()?
+    .ok_or(SessionError::Invalid("credit_note"))
+}
+
+/// Cancels the whole invoice with a credit note and frees its session for correction.
+pub fn cancel(
+    conn: &mut Connection,
+    invoice_id: i64,
+    reason: &str,
+    today: NaiveDate,
+) -> Result<CreditNote> {
+    let tx = conn.transaction()?;
+    let invoice = get(&tx, invoice_id)?;
+    if credit_note_for(&tx, invoice_id)?.is_some() {
+        return Err(SessionError::Invalid("invoice_cancelled"));
+    }
+    let (year, month) = (today.year(), today.month());
+    let seq: u32 = tx.query_row(
+        "SELECT COALESCE(MAX(seq), 0) + 1 FROM credit_note WHERE year = ?1 AND month = ?2",
+        params![year, month],
+        |r| r.get(0),
+    )?;
+    tx.execute(
+        "INSERT INTO credit_note (number, year, month, seq, invoice_id, issued_on, amount_cents, reason)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            format!("AV-{}", format_number(year, month, seq)),
+            year,
+            month,
+            seq,
+            invoice_id,
+            today.format("%Y-%m-%d").to_string(),
+            invoice.amount_cents,
+            reason.trim()
+        ],
+    )?;
+    let credit_note = get_credit_note(&tx, tx.last_insert_rowid())?;
+    // With its invoice cancelled, the session is a draft again (the trigger now allows it).
+    tx.execute(
+        "UPDATE session SET validated_at = NULL WHERE id = ?1",
+        [invoice.session_id],
+    )?;
+    tx.commit()?;
+    Ok(credit_note)
+}
+
+/// Marks the invoice as sent (now) or not sent.
+pub fn set_sent(conn: &Connection, invoice_id: i64, sent: bool) -> Result<InvoiceView> {
+    get(conn, invoice_id)?;
+    if sent {
+        conn.execute(
+            "INSERT INTO invoice_sending (invoice_id, sent_at) VALUES (?1, ?2)
+             ON CONFLICT (invoice_id) DO UPDATE SET sent_at = excluded.sent_at",
+            params![
+                invoice_id,
+                Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
+            ],
+        )?;
+    } else {
+        conn.execute(
+            "DELETE FROM invoice_sending WHERE invoice_id = ?1",
+            [invoice_id],
+        )?;
+    }
+    get_view(conn, invoice_id)
 }
 
 /// Issues the invoice of `session_id`. Must run inside the caller's transaction, which
@@ -174,6 +332,79 @@ pub(crate) fn issue(conn: &Connection, session_id: i64, issued_on: NaiveDate) ->
         ],
     )?;
     get(conn, conn.last_insert_rowid())
+}
+
+// --- Documents ---
+
+/// PDF of an invoice. Payments arrive with #11; until then no invoice shows as paid.
+pub fn invoice_pdf(conn: &Connection, id: i64) -> Result<Vec<u8>> {
+    let invoice = get(conn, id)?;
+    let logo = settings::logo(conn)?;
+    let logo = logo.as_ref().map(|(bytes, mime)| pdf::Logo { bytes, mime });
+    Ok(pdf::invoice(&invoice, false, logo.as_ref()))
+}
+
+pub fn credit_note_pdf(conn: &Connection, id: i64) -> Result<Vec<u8>> {
+    let credit_note = get_credit_note(conn, id)?;
+    let invoice = get(conn, credit_note.invoice_id)?;
+    let logo = settings::logo(conn)?;
+    let logo = logo.as_ref().map(|(bytes, mime)| pdf::Logo { bytes, mime });
+    Ok(pdf::credit_note(&credit_note, &invoice, logo.as_ref()))
+}
+
+// --- Commands ---
+
+fn today() -> NaiveDate {
+    Local::now().date_naive()
+}
+
+#[tauri::command]
+pub fn list_invoices(state: State) -> Result<Vec<InvoiceView>> {
+    list_all(state.lock().unwrap().conn()?)
+}
+
+/// Raw PDF bytes, for the preview.
+#[tauri::command]
+pub fn get_invoice_pdf(state: State, id: i64) -> Result<tauri::ipc::Response> {
+    Ok(tauri::ipc::Response::new(invoice_pdf(
+        state.lock().unwrap().conn()?,
+        id,
+    )?))
+}
+
+#[tauri::command]
+pub fn save_invoice_pdf(state: State, id: i64, path: PathBuf) -> Result<()> {
+    let bytes = invoice_pdf(state.lock().unwrap().conn()?, id)?;
+    std::fs::write(path, bytes)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_credit_note_pdf(state: State, id: i64) -> Result<tauri::ipc::Response> {
+    Ok(tauri::ipc::Response::new(credit_note_pdf(
+        state.lock().unwrap().conn()?,
+        id,
+    )?))
+}
+
+#[tauri::command]
+pub fn save_credit_note_pdf(state: State, id: i64, path: PathBuf) -> Result<()> {
+    let bytes = credit_note_pdf(state.lock().unwrap().conn()?, id)?;
+    std::fs::write(path, bytes)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_invoice(state: State, id: i64, reason: String) -> Result<InvoiceView> {
+    let mut session = state.lock().unwrap();
+    let conn = session.conn_mut()?;
+    cancel(conn, id, &reason, today())?;
+    get_view(conn, id)
+}
+
+#[tauri::command]
+pub fn set_invoice_sent(state: State, id: i64, sent: bool) -> Result<InvoiceView> {
+    set_sent(state.lock().unwrap().conn()?, id, sent)
 }
 
 #[cfg(test)]

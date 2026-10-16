@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { lockApi } from "./lock/api";
 import { useIdle } from "./lock/useIdle";
+import { InvoicesPage } from "./invoices/InvoicesPage";
 import { PatientsPage } from "./patients/PatientsPage";
 import { SettingsPage } from "./settings/SettingsPage";
 
-type Page = "home" | "patients" | "settings";
+type Page = "home" | "patients" | "invoices" | "settings";
 
 const PAGES: Record<Page, string> = {
   home: "Accueil",
   patients: "Patients",
+  invoices: "Factures",
   settings: "Paramètres",
 };
 
@@ -53,6 +55,7 @@ function Home({
           <p>Le tableau de bord arrivera avec la comptabilité.</p>
         )}
         {page === "patients" && <PatientsPage />}
+        {page === "invoices" && <InvoicesPage />}
         {page === "settings" && autoLock !== null && (
           <SettingsPage
             autoLock={autoLock}
