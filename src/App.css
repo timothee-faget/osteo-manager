@@ -96,3 +96,70 @@ button.link {
   background: #e3f2fd;
   color: #0d47a1;
 }
+
+.topbar {
+  padding: 0.5rem 2rem;
+  border-bottom: 1px solid #d0d7de;
+}
+
+.topbar h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+nav button[aria-current="page"] {
+  font-weight: bold;
+}
+
+.settings {
+  max-width: 48rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.with-unit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.with-unit input {
+  width: 8rem;
+}
+
+.logo img {
+  max-height: 6rem;
+  max-width: 16rem;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  vertical-align: top;
+}
+
+td.multiline {
+  white-space: pre-line;
+}
+
+tr.archived {
+  opacity: 0.6;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}

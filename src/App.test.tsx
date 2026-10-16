@@ -1,78 +1,14 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import App from "./App";
-import type { LockStatus } from "./lock/api";
+import { fakeBackend, openSettings, RECOVERY_KEY } from "./test/fakeBackend";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
-
-const RECOVERY_KEY = "ABCD-0000-0000-0000-0000-0000-0000-0000";
-
-/** In-memory stand-in for the Rust session commands. */
-function fakeBackend(initial: LockStatus) {
-  const state = {
-    status: initial,
-    password: "correct horse",
-    autoLock: 10,
-    backupFolder: null as string | null,
-    lastBackup: null as string | null,
-  };
-  vi.mocked(invoke).mockImplementation(async (cmd, args) => {
-    const a = (args ?? {}) as Record<string, string>;
-    switch (cmd) {
-      case "lock_status":
-        return state.status;
-      case "create_password":
-        state.password = a.password;
-        state.status = "unlocked";
-        return RECOVERY_KEY;
-      case "unlock":
-        if (a.password !== state.password) throw { code: "wrong_password" };
-        state.status = "unlocked";
-        return;
-      case "recover":
-        if (a.recoveryKey !== RECOVERY_KEY)
-          throw { code: "wrong_recovery_key" };
-        state.password = a.newPassword;
-        state.status = "unlocked";
-        return;
-      case "lock":
-        state.status = "locked";
-        return;
-      case "auto_lock_minutes":
-        return state.autoLock;
-      case "set_auto_lock_minutes":
-        state.autoLock = Number(a.minutes);
-        return;
-      case "print_page":
-      case "restart":
-        return;
-      case "backup_status":
-        return {
-          folder: state.backupFolder,
-          last_backup: state.lastBackup,
-          last_error: null,
-        };
-      case "set_backup_folder":
-        state.backupFolder = a.folder;
-        state.lastBackup = "2026-10-16T18:30:00";
-        return;
-      case "backup_now":
-        state.lastBackup = "2026-10-16T19:00:00";
-        return;
-      case "restore_backup":
-        if (!a.path.endsWith(".osteobackup")) throw { code: "invalid_backup" };
-        state.status = "locked";
-        return;
-    }
-    throw new Error(`unexpected command ${cmd}`);
-  });
-  return state;
-}
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
@@ -202,13 +138,16 @@ test("enregistre le délai de verrouillage", async () => {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   render(<App />);
+  await openSettings(user);
 
   const field = await screen.findByLabelText(
     "Verrouillage automatique après (minutes)",
   );
   await user.clear(field);
   await user.type(field, "15");
-  await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+  await user.click(
+    within(field.closest("form")!).getByRole("button", { name: "Enregistrer" }),
+  );
 
   expect(await screen.findByRole("status")).toHaveTextContent(
     "Délai enregistré.",
@@ -221,6 +160,7 @@ test("choix du dossier de sauvegarde puis sauvegarde immédiate", async () => {
   const state = fakeBackend("unlocked");
   vi.mocked(open).mockResolvedValue("/Volumes/Disque/Osteo");
   render(<App />);
+  await openSettings(user);
 
   expect(
     await screen.findByText(/les données ne sont pas sauvegardées/),
@@ -261,6 +201,7 @@ test("restaurer depuis l'accueil demande confirmation", async () => {
   fakeBackend("unlocked");
   vi.mocked(open).mockResolvedValue("/tmp/a.osteobackup");
   render(<App />);
+  await openSettings(user);
 
   const restore = await screen.findByRole("button", {
     name: "Restaurer une sauvegarde…",

@@ -56,26 +56,30 @@ pub enum SessionError {
     NoBackupFolder,
     #[error("backup folder not found")]
     FolderNotFound,
+    /// A form field failed validation; the front highlights it.
+    #[error("invalid {0}")]
+    Invalid(&'static str),
 }
 
 /// Sent to the front as `{ code, message }`; the front maps `code` to a French message.
 impl Serialize for SessionError {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let code = match self {
-            Self::Vault(VaultError::WrongPassword) => "wrong_password",
-            Self::Vault(VaultError::WrongRecoveryKey) => "wrong_recovery_key",
-            Self::Vault(VaultError::PasswordTooShort) => "password_too_short",
-            Self::Locked => "locked",
-            Self::InvalidDelay => "invalid_delay",
-            Self::Backup(BackupError::Invalid) => "invalid_backup",
-            Self::NoBackupFolder => "no_backup_folder",
-            Self::FolderNotFound => "folder_not_found",
-            Self::Backup(_) | Self::Io(_) => "backup_failed",
-            _ => "internal",
+        let code: std::borrow::Cow<str> = match self {
+            Self::Vault(VaultError::WrongPassword) => "wrong_password".into(),
+            Self::Vault(VaultError::WrongRecoveryKey) => "wrong_recovery_key".into(),
+            Self::Vault(VaultError::PasswordTooShort) => "password_too_short".into(),
+            Self::Locked => "locked".into(),
+            Self::InvalidDelay => "invalid_delay".into(),
+            Self::Backup(BackupError::Invalid) => "invalid_backup".into(),
+            Self::NoBackupFolder => "no_backup_folder".into(),
+            Self::FolderNotFound => "folder_not_found".into(),
+            Self::Backup(_) | Self::Io(_) => "backup_failed".into(),
+            Self::Invalid(field) => format!("invalid_{field}").into(),
+            _ => "internal".into(),
         };
         let mut st = s.serialize_struct("SessionError", 2)?;
-        st.serialize_field("code", code)?;
+        st.serialize_field("code", &code)?;
         st.serialize_field("message", &self.to_string())?;
         st.end()
     }
@@ -261,7 +265,7 @@ impl Session {
         Ok(())
     }
 
-    fn conn(&self) -> Result<&Connection, SessionError> {
+    pub fn conn(&self) -> Result<&Connection, SessionError> {
         self.conn.as_ref().ok_or(SessionError::Locked)
     }
 
@@ -276,7 +280,7 @@ impl Session {
     }
 }
 
-type State<'a> = tauri::State<'a, Mutex<Session>>;
+pub type State<'a> = tauri::State<'a, Mutex<Session>>;
 
 // Commands that derive a key are async so Argon2 does not block the main thread.
 
