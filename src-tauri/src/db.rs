@@ -46,6 +46,43 @@ pub const MIGRATIONS: &[&str] = &[
         urssaf_provision_bp INTEGER NOT NULL CHECK (urssaf_provision_bp BETWEEN 0 AND 10000)
     ) STRICT;
     INSERT INTO billing_settings VALUES (1, 6000, 6000, 4500, 2600);",
+    // v3: patient records, mirroring the Word patient files. Dates are ISO `YYYY-MM-DD`.
+    "CREATE TABLE patient (
+        id INTEGER PRIMARY KEY,
+        civility TEXT CHECK (civility IN ('mme', 'm')),
+        last_name TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        birth_date TEXT,
+        phone TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        profession TEXT NOT NULL DEFAULT '',
+        sport TEXT NOT NULL DEFAULT '',
+        general_practitioner TEXT NOT NULL DEFAULT '',
+        medical_history TEXT NOT NULL DEFAULT '',
+        surgical_history TEXT NOT NULL DEFAULT '',
+        trauma_history TEXT NOT NULL DEFAULT '',
+        current_treatment TEXT NOT NULL DEFAULT '',
+        bps_context TEXT NOT NULL DEFAULT '',
+        ent TEXT NOT NULL DEFAULT '',
+        cardio_pulmonary TEXT NOT NULL DEFAULT '',
+        digestive TEXT NOT NULL DEFAULT '',
+        gynecological TEXT NOT NULL DEFAULT '',
+        lifestyle TEXT NOT NULL DEFAULT '',
+        guardian_consent_date TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE patient_guardian (
+        id INTEGER PRIMARY KEY,
+        patient_id INTEGER NOT NULL REFERENCES patient (id),
+        name TEXT NOT NULL,
+        relationship TEXT NOT NULL DEFAULT '',
+        phone TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT ''
+    ) STRICT;
+    CREATE INDEX patient_guardian_patient ON patient_guardian (patient_id);",
 ];
 
 #[derive(Debug, thiserror::Error)]

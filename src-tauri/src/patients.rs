@@ -1,0 +1,669 @@
+//! Patient records: identification, history and review of systems (free text, as in the
+//! Word files), plus legal guardians for minors. Records are never deleted.
+
+use std::path::PathBuf;
+
+use chrono::{Local, Months, NaiveDate};
+use rusqlite::{Connection, Row, params, params_from_iter};
+use serde::{Deserialize, Serialize};
+use unicode_normalization::UnicodeNormalization;
+use unicode_normalization::char::is_combining_mark;
+
+use crate::session::{SessionError, State};
+use crate::settings::is_plausible_email;
+
+type Result<T> = std::result::Result<T, SessionError>;
+
+const DATE_FORMAT: &str = "%Y-%m-%d";
+const ADULT_AGE_MONTHS: u32 = 18 * 12;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Civility {
+    Mme,
+    M,
+}
+
+impl Civility {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Mme => "mme",
+            Self::M => "m",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "mme" => Some(Self::Mme),
+            "m" => Some(Self::M),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Guardian {
+    pub name: String,
+    /// Free text: mère, père, tuteur…
+    pub relationship: String,
+    pub phone: String,
+    pub email: String,
+}
+
+/// Free-text columns, in the order of `PatientInput::texts`.
+const TEXT_COLUMNS: [&str; 16] = [
+    "phone",
+    "email",
+    "address",
+    "profession",
+    "sport",
+    "general_practitioner",
+    "medical_history",
+    "surgical_history",
+    "trauma_history",
+    "current_treatment",
+    "bps_context",
+    "ent",
+    "cardio_pulmonary",
+    "digestive",
+    "gynecological",
+    "lifestyle",
+];
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PatientInput {
+    pub civility: Option<Civility>,
+    pub last_name: String,
+    pub first_name: String,
+    /// `YYYY-MM-DD`.
+    pub birth_date: Option<String>,
+    pub phone: String,
+    /// Where invoices are sent.
+    pub email: String,
+    pub address: String,
+    pub profession: String,
+    pub sport: String,
+    pub general_practitioner: String,
+    // History
+    pub medical_history: String,
+    pub surgical_history: String,
+    pub trauma_history: String,
+    pub current_treatment: String,
+    pub bps_context: String,
+    // Review of systems
+    pub ent: String,
+    pub cardio_pulmonary: String,
+    pub digestive: String,
+    pub gynecological: String,
+    pub lifestyle: String,
+    // Minors
+    /// When the guardians' consent to treatment was obtained.
+    pub guardian_consent_date: Option<String>,
+    pub guardians: Vec<Guardian>,
+}
+
+impl PatientInput {
+    fn texts(&self) -> [&String; 16] {
+        [
+            &self.phone,
+            &self.email,
+            &self.address,
+            &self.profession,
+            &self.sport,
+            &self.general_practitioner,
+            &self.medical_history,
+            &self.surgical_history,
+            &self.trauma_history,
+            &self.current_treatment,
+            &self.bps_context,
+            &self.ent,
+            &self.cardio_pulmonary,
+            &self.digestive,
+            &self.gynecological,
+            &self.lifestyle,
+        ]
+    }
+
+    fn texts_mut(&mut self) -> [&mut String; 16] {
+        [
+            &mut self.phone,
+            &mut self.email,
+            &mut self.address,
+            &mut self.profession,
+            &mut self.sport,
+            &mut self.general_practitioner,
+            &mut self.medical_history,
+            &mut self.surgical_history,
+            &mut self.trauma_history,
+            &mut self.current_treatment,
+            &mut self.bps_context,
+            &mut self.ent,
+            &mut self.cardio_pulmonary,
+            &mut self.digestive,
+            &mut self.gynecological,
+            &mut self.lifestyle,
+        ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Patient {
+    pub id: i64,
+    #[serde(flatten)]
+    pub data: PatientInput,
+    pub is_minor: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PatientSummary {
+    pub id: i64,
+    pub civility: Option<Civility>,
+    pub last_name: String,
+    pub first_name: String,
+    pub birth_date: Option<String>,
+    pub phone: String,
+    pub is_minor: bool,
+}
+
+pub fn is_minor(birth_date: Option<&str>, today: NaiveDate) -> bool {
+    birth_date
+        .and_then(|d| NaiveDate::parse_from_str(d, DATE_FORMAT).ok())
+        .and_then(|b| b.checked_add_months(Months::new(ADULT_AGE_MONTHS)))
+        .is_some_and(|adult_on| adult_on > today)
+}
+
+/// Lowercase without accents, for searching: "Hélène" → "helene".
+fn normalize(s: &str) -> String {
+    s.nfd()
+        .filter(|c| !is_combining_mark(*c))
+        .collect::<String>()
+        .to_lowercase()
+}
+
+fn trim_date(d: &Option<String>) -> Option<String> {
+    d.as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .map(String::from)
+}
+
+fn check(input: &PatientInput, today: NaiveDate) -> Result<PatientInput> {
+    let mut p = input.clone();
+    p.last_name = p.last_name.trim().to_string();
+    p.first_name = p.first_name.trim().to_string();
+    for t in p.texts_mut() {
+        *t = t.trim().to_string();
+    }
+    p.birth_date = trim_date(&p.birth_date);
+    p.guardian_consent_date = trim_date(&p.guardian_consent_date);
+
+    if p.last_name.is_empty() {
+        return Err(SessionError::Invalid("last_name"));
+    }
+    if p.first_name.is_empty() {
+        return Err(SessionError::Invalid("first_name"));
+    }
+    if let Some(d) = &p.birth_date {
+        match NaiveDate::parse_from_str(d, DATE_FORMAT) {
+            Ok(b) if b <= today => {}
+            _ => return Err(SessionError::Invalid("birth_date")),
+        }
+    }
+    if let Some(d) = &p.guardian_consent_date
+        && NaiveDate::parse_from_str(d, DATE_FORMAT).is_err()
+    {
+        return Err(SessionError::Invalid("guardian_consent_date"));
+    }
+    if !p.email.is_empty() && !is_plausible_email(&p.email) {
+        return Err(SessionError::Invalid("email"));
+    }
+    for g in &mut p.guardians {
+        for f in [&mut g.name, &mut g.relationship, &mut g.phone, &mut g.email] {
+            *f = f.trim().to_string();
+        }
+        if g.name.is_empty() {
+            return Err(SessionError::Invalid("guardian_name"));
+        }
+        if !g.email.is_empty() && !is_plausible_email(&g.email) {
+            return Err(SessionError::Invalid("guardian_email"));
+        }
+    }
+    Ok(p)
+}
+
+fn now() -> String {
+    Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
+}
+
+fn save_guardians(conn: &Connection, patient_id: i64, guardians: &[Guardian]) -> Result<()> {
+    conn.execute(
+        "DELETE FROM patient_guardian WHERE patient_id = ?1",
+        [patient_id],
+    )?;
+    for g in guardians {
+        conn.execute(
+            "INSERT INTO patient_guardian (patient_id, name, relationship, phone, email)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![patient_id, g.name, g.relationship, g.phone, g.email],
+        )?;
+    }
+    Ok(())
+}
+
+/// Values bound after the text columns, shared by insert and update.
+fn core_values(p: &PatientInput) -> Vec<rusqlite::types::Value> {
+    use rusqlite::types::Value;
+    let opt = |s: &Option<String>| s.clone().map_or(Value::Null, Value::Text);
+    let mut values: Vec<Value> = p
+        .texts()
+        .iter()
+        .map(|t| Value::Text((*t).clone()))
+        .collect();
+    values.extend([
+        p.civility
+            .map_or(Value::Null, |c| Value::Text(c.as_str().into())),
+        Value::Text(p.last_name.clone()),
+        Value::Text(p.first_name.clone()),
+        opt(&p.birth_date),
+        opt(&p.guardian_consent_date),
+    ]);
+    values
+}
+
+const CORE_COLUMNS: [&str; 5] = [
+    "civility",
+    "last_name",
+    "first_name",
+    "birth_date",
+    "guardian_consent_date",
+];
+
+pub fn create(conn: &mut Connection, input: &PatientInput, today: NaiveDate) -> Result<Patient> {
+    let p = check(input, today)?;
+    let columns: Vec<&str> = TEXT_COLUMNS.iter().chain(&CORE_COLUMNS).copied().collect();
+    let placeholders: Vec<String> = (1..=columns.len() + 2).map(|i| format!("?{i}")).collect();
+    let mut values = core_values(&p);
+    let ts = now();
+    values.push(ts.clone().into());
+    values.push(ts.into());
+
+    let tx = conn.transaction()?;
+    tx.execute(
+        &format!(
+            "INSERT INTO patient ({}, created_at, updated_at) VALUES ({})",
+            columns.join(", "),
+            placeholders.join(", ")
+        ),
+        params_from_iter(values),
+    )?;
+    let id = tx.last_insert_rowid();
+    save_guardians(&tx, id, &p.guardians)?;
+    tx.commit()?;
+    get(conn, id, today)
+}
+
+pub fn update(
+    conn: &mut Connection,
+    id: i64,
+    input: &PatientInput,
+    today: NaiveDate,
+) -> Result<Patient> {
+    let p = check(input, today)?;
+    let assignments: Vec<String> = TEXT_COLUMNS
+        .iter()
+        .chain(&CORE_COLUMNS)
+        .enumerate()
+        .map(|(i, c)| format!("{c} = ?{}", i + 1))
+        .collect();
+    let n = assignments.len();
+    let mut values = core_values(&p);
+    values.push(now().into());
+    values.push(id.into());
+
+    let tx = conn.transaction()?;
+    let changed = tx.execute(
+        &format!(
+            "UPDATE patient SET {}, updated_at = ?{} WHERE id = ?{}",
+            assignments.join(", "),
+            n + 1,
+            n + 2
+        ),
+        params_from_iter(values),
+    )?;
+    if changed == 0 {
+        return Err(SessionError::Invalid("patient"));
+    }
+    save_guardians(&tx, id, &p.guardians)?;
+    tx.commit()?;
+    get(conn, id, today)
+}
+
+fn patient_from_row(r: &Row, today: NaiveDate) -> rusqlite::Result<Patient> {
+    let mut data = PatientInput::default();
+    for (i, t) in data.texts_mut().into_iter().enumerate() {
+        *t = r.get(i)?;
+    }
+    let n = TEXT_COLUMNS.len();
+    data.civility = r
+        .get::<_, Option<String>>(n)?
+        .as_deref()
+        .and_then(Civility::parse);
+    data.last_name = r.get(n + 1)?;
+    data.first_name = r.get(n + 2)?;
+    data.birth_date = r.get(n + 3)?;
+    data.guardian_consent_date = r.get(n + 4)?;
+    Ok(Patient {
+        id: r.get(n + 5)?,
+        is_minor: is_minor(data.birth_date.as_deref(), today),
+        created_at: r.get(n + 6)?,
+        updated_at: r.get(n + 7)?,
+        data,
+    })
+}
+
+pub fn get(conn: &Connection, id: i64, today: NaiveDate) -> Result<Patient> {
+    let columns: Vec<&str> = TEXT_COLUMNS.iter().chain(&CORE_COLUMNS).copied().collect();
+    let mut patient = conn
+        .query_row(
+            &format!(
+                "SELECT {}, id, created_at, updated_at FROM patient WHERE id = ?1",
+                columns.join(", ")
+            ),
+            [id],
+            |r| patient_from_row(r, today),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => SessionError::Invalid("patient"),
+            e => e.into(),
+        })?;
+    let mut stmt = conn.prepare(
+        "SELECT name, relationship, phone, email FROM patient_guardian
+         WHERE patient_id = ?1 ORDER BY id",
+    )?;
+    patient.data.guardians = stmt
+        .query_map([id], |r| {
+            Ok(Guardian {
+                name: r.get(0)?,
+                relationship: r.get(1)?,
+                phone: r.get(2)?,
+                email: r.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(patient)
+}
+
+/// Patients whose name contains every word of `query`, ignoring case and accents,
+/// sorted by last name then first name.
+pub fn list(conn: &Connection, query: &str, today: NaiveDate) -> Result<Vec<PatientSummary>> {
+    let words: Vec<String> = query.split_whitespace().map(normalize).collect();
+    let mut stmt =
+        conn.prepare("SELECT id, civility, last_name, first_name, birth_date, phone FROM patient")?;
+    let mut patients: Vec<(String, PatientSummary)> = stmt
+        .query_map([], |r| {
+            let birth_date: Option<String> = r.get(4)?;
+            Ok(PatientSummary {
+                id: r.get(0)?,
+                civility: r
+                    .get::<_, Option<String>>(1)?
+                    .as_deref()
+                    .and_then(Civility::parse),
+                last_name: r.get(2)?,
+                first_name: r.get(3)?,
+                is_minor: is_minor(birth_date.as_deref(), today),
+                birth_date,
+                phone: r.get(5)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .map(|p| (normalize(&format!("{} {}", p.last_name, p.first_name)), p))
+        .filter(|(key, _)| words.iter().all(|w| key.contains(w.as_str())))
+        .collect();
+    patients.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(patients.into_iter().map(|(_, p)| p).collect())
+}
+
+/// The full record, for the patient's right of access and portability (GDPR art. 15 and 20).
+/// Sessions, invoices and attachments will join it as those modules land.
+pub fn export(conn: &Connection, id: i64, today: NaiveDate) -> Result<serde_json::Value> {
+    Ok(serde_json::json!({
+        "format": "osteo-manager/patient-export/v1",
+        "exported_at": now(),
+        "patient": get(conn, id, today)?,
+    }))
+}
+
+// --- Commands ---
+
+fn today() -> NaiveDate {
+    Local::now().date_naive()
+}
+
+fn with_conn<T>(state: &State, f: impl FnOnce(&mut Connection) -> Result<T>) -> Result<T> {
+    f(state.lock().unwrap().conn_mut()?)
+}
+
+#[tauri::command]
+pub fn list_patients(state: State, query: String) -> Result<Vec<PatientSummary>> {
+    with_conn(&state, |c| list(c, &query, today()))
+}
+
+#[tauri::command]
+pub fn get_patient(state: State, id: i64) -> Result<Patient> {
+    with_conn(&state, |c| get(c, id, today()))
+}
+
+#[tauri::command]
+pub fn create_patient(state: State, patient: PatientInput) -> Result<Patient> {
+    with_conn(&state, |c| create(c, &patient, today()))
+}
+
+#[tauri::command]
+pub fn update_patient(state: State, id: i64, patient: PatientInput) -> Result<Patient> {
+    with_conn(&state, |c| update(c, id, &patient, today()))
+}
+
+#[tauri::command]
+pub fn export_patient(state: State, id: i64, path: PathBuf) -> Result<()> {
+    let json = with_conn(&state, |c| export(c, id, today()))?;
+    std::fs::write(
+        path,
+        serde_json::to_vec_pretty(&json).expect("JSON serializes"),
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEY: [u8; crate::db::KEY_LEN] = [7; crate::db::KEY_LEN];
+
+    fn conn() -> (tempfile::TempDir, Connection) {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::db::open(&dir.path().join("osteo.db"), &KEY).unwrap();
+        (dir, conn)
+    }
+
+    fn day(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, DATE_FORMAT).unwrap()
+    }
+
+    const TODAY: &str = "2026-10-16";
+
+    /// Fictitious patient.
+    fn input(last: &str, first: &str) -> PatientInput {
+        PatientInput {
+            civility: Some(Civility::Mme),
+            last_name: last.into(),
+            first_name: first.into(),
+            birth_date: Some("1980-05-12".into()),
+            phone: "06 00 00 00 00".into(),
+            email: "patiente@example.org".into(),
+            medical_history: "RAS".into(),
+            ..Default::default()
+        }
+    }
+
+    fn invalid_field(r: Result<Patient>) -> &'static str {
+        match r {
+            Err(SessionError::Invalid(field)) => field,
+            other => panic!("expected a validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_trims_and_reads_back() {
+        let (_dir, mut c) = conn();
+        let mut i = input(" Dupont ", "Anne");
+        i.lifestyle = "  Sommeil correct \n".into();
+        i.birth_date = Some(" ".into());
+        let p = create(&mut c, &i, day(TODAY)).unwrap();
+        assert_eq!(p.data.last_name, "Dupont");
+        assert_eq!(p.data.lifestyle, "Sommeil correct");
+        assert_eq!(p.data.birth_date, None);
+        assert_eq!(p.data.civility, Some(Civility::Mme));
+        assert_eq!(get(&c, p.id, day(TODAY)).unwrap(), p);
+    }
+
+    #[test]
+    fn names_are_required_and_dates_checked() {
+        let (_dir, mut c) = conn();
+        let today = day(TODAY);
+        assert_eq!(
+            invalid_field(create(&mut c, &input(" ", "Anne"), today)),
+            "last_name"
+        );
+        assert_eq!(
+            invalid_field(create(&mut c, &input("Dupont", ""), today)),
+            "first_name"
+        );
+
+        for bad in ["12/05/1980", "1980-13-01", "2026-10-17"] {
+            let mut i = input("Dupont", "Anne");
+            i.birth_date = Some(bad.into());
+            assert_eq!(
+                invalid_field(create(&mut c, &i, today)),
+                "birth_date",
+                "{bad}"
+            );
+        }
+        let mut i = input("Dupont", "Anne");
+        i.email = "pas un mail".into();
+        assert_eq!(invalid_field(create(&mut c, &i, today)), "email");
+        assert!(list(&c, "", today).unwrap().is_empty());
+    }
+
+    #[test]
+    fn minor_status_follows_the_18th_birthday() {
+        let today = day(TODAY);
+        assert!(is_minor(Some("2008-10-17"), today));
+        assert!(!is_minor(Some("2008-10-16"), today));
+        assert!(!is_minor(None, today));
+    }
+
+    #[test]
+    fn guardians_are_saved_replaced_and_validated() {
+        let (_dir, mut c) = conn();
+        let today = day(TODAY);
+        let mut i = input("Petit", "Léo");
+        i.birth_date = Some("2018-03-01".into());
+        i.guardian_consent_date = Some("2026-10-01".into());
+        i.guardians = vec![
+            Guardian {
+                name: "Julie Petit".into(),
+                relationship: "mère".into(),
+                ..Default::default()
+            },
+            Guardian {
+                name: "Marc Petit".into(),
+                relationship: "père".into(),
+                ..Default::default()
+            },
+        ];
+        let p = create(&mut c, &i, today).unwrap();
+        assert!(p.is_minor);
+        assert_eq!(p.data.guardians.len(), 2);
+        assert_eq!(p.data.guardian_consent_date.as_deref(), Some("2026-10-01"));
+
+        i.guardians.remove(0);
+        let p = update(&mut c, p.id, &i, today).unwrap();
+        assert_eq!(p.data.guardians.len(), 1);
+        assert_eq!(p.data.guardians[0].name, "Marc Petit");
+
+        i.guardians[0].name = " ".into();
+        assert_eq!(
+            invalid_field(update(&mut c, p.id, &i, today)),
+            "guardian_name"
+        );
+        // The failed update left the record untouched.
+        assert_eq!(
+            get(&c, p.id, today).unwrap().data.guardians[0].name,
+            "Marc Petit"
+        );
+    }
+
+    #[test]
+    fn update_changes_fields_and_timestamp_only() {
+        let (_dir, mut c) = conn();
+        let today = day(TODAY);
+        let p = create(&mut c, &input("Dupont", "Anne"), today).unwrap();
+        let mut i = p.data.clone();
+        i.digestive = "Reflux".into();
+        let updated = update(&mut c, p.id, &i, today).unwrap();
+        assert_eq!(updated.data.digestive, "Reflux");
+        assert_eq!(updated.created_at, p.created_at);
+        assert_eq!(invalid_field(update(&mut c, 999, &i, today)), "patient");
+    }
+
+    #[test]
+    fn search_ignores_case_and_accents_and_sorts_by_name() {
+        let (_dir, mut c) = conn();
+        let today = day(TODAY);
+        for (last, first) in [
+            ("Lefèvre", "Hélène"),
+            ("Dupont", "Anne"),
+            ("Durand", "Hélio"),
+            ("dupont", "Bruno"),
+        ] {
+            create(&mut c, &input(last, first), today).unwrap();
+        }
+        let names = |q: &str| -> Vec<String> {
+            list(&c, q, today)
+                .unwrap()
+                .into_iter()
+                .map(|p| format!("{} {}", p.last_name, p.first_name))
+                .collect()
+        };
+        assert_eq!(
+            names(""),
+            [
+                "Dupont Anne",
+                "dupont Bruno",
+                "Durand Hélio",
+                "Lefèvre Hélène"
+            ]
+        );
+        assert_eq!(names("helene"), ["Lefèvre Hélène"]);
+        assert_eq!(names("HEL"), ["Durand Hélio", "Lefèvre Hélène"]);
+        assert_eq!(names("anne dup"), ["Dupont Anne"]);
+        assert!(names("zzz").is_empty());
+    }
+
+    #[test]
+    fn export_contains_the_whole_record() {
+        let (_dir, mut c) = conn();
+        let today = day(TODAY);
+        let mut i = input("Dupont", "Anne");
+        i.surgical_history = "Appendicectomie 1995".into();
+        let p = create(&mut c, &i, today).unwrap();
+        let json = export(&c, p.id, today).unwrap();
+        assert_eq!(json["format"], "osteo-manager/patient-export/v1");
+        assert_eq!(json["patient"]["last_name"], "Dupont");
+        assert_eq!(json["patient"]["surgical_history"], "Appendicectomie 1995");
+        assert_eq!(json["patient"]["guardians"], serde_json::json!([]));
+    }
+}

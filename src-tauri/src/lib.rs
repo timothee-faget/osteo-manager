@@ -1,5 +1,6 @@
 pub mod backup;
 pub mod db;
+pub mod patients;
 pub mod session;
 pub mod settings;
 pub mod vault;
@@ -64,6 +65,11 @@ pub fn run() {
             settings::archive_location,
             settings::get_billing_settings,
             settings::update_billing_settings,
+            patients::list_patients,
+            patients::get_patient,
+            patients::create_patient,
+            patients::update_patient,
+            patients::export_patient,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -269,6 +269,11 @@ impl Session {
         self.conn.as_ref().ok_or(SessionError::Locked)
     }
 
+    /// For transactions.
+    pub fn conn_mut(&mut self) -> Result<&mut Connection, SessionError> {
+        self.conn.as_mut().ok_or(SessionError::Locked)
+    }
+
     fn load_vault(&self) -> Result<Vault, SessionError> {
         Vault::load(&self.vault_path())?.ok_or(SessionError::NotSetUp)
     }
