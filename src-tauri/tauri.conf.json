@@ -33,6 +33,18 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "category": "Business"
+    "category": "Business",
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/timothee-faget/osteo-manager-releases/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

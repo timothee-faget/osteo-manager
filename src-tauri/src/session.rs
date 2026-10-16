@@ -342,6 +342,18 @@ pub async fn restore_backup(state: State<'_>, path: PathBuf) -> Result<(), Sessi
         .restore(&path, Local::now().naive_local())
 }
 
+/// Restarts after an update is installed. `AppHandle::restart` skips `RunEvent::Exit`,
+/// so the exit backup is done here.
+#[tauri::command]
+pub fn restart(app: tauri::AppHandle, state: State) {
+    {
+        let mut session = state.lock().unwrap();
+        session.lock();
+        session.backup_on_exit(Local::now().naive_local());
+    }
+    app.restart()
+}
+
 /// `window.print()` is a no-op in the macOS webview.
 #[tauri::command]
 pub fn print_page(webview: tauri::Webview) -> Result<(), String> {

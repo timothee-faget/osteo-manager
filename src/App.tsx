@@ -8,6 +8,7 @@ import {
   SetupScreen,
   UnlockScreen,
 } from "./lock/screens";
+import { UpdateBanner } from "./update/UpdateBanner";
 
 type Screen =
   | { kind: "loading" }
@@ -17,7 +18,7 @@ type Screen =
   | { kind: "recover" }
   | { kind: "unlocked" };
 
-function App() {
+function CurrentScreen() {
   const [screen, setScreen] = useState<Screen>({ kind: "loading" });
 
   useEffect(() => {
@@ -68,6 +69,15 @@ function App() {
     case "unlocked":
       return <Home onLock={lock} onRestored={locked} />;
   }
+}
+
+function App() {
+  return (
+    <>
+      <UpdateBanner />
+      <CurrentScreen />
+    </>
+  );
 }
 
 export default App;

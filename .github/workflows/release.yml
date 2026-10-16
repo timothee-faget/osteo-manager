@@ -1,0 +1,53 @@
+name: Release
+
+# Builds the macOS app on a `v*` tag and publishes it, with the signed updater
+# artifacts and latest.json, to the public releases repo (this repo stays private).
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  RELEASES_REPO: osteo-manager-releases
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check that the tag matches the app version
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match tauri.conf.json version $version"
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          # Fine-grained token with Contents: read and write on the releases repo only.
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ env.RELEASES_REPO }}
+          # The commit SHA of this repo does not exist in the releases repo.
+          releaseCommitish: main
+          tagName: ${{ github.ref_name }}
+          releaseName: Osteo Manager ${{ github.ref_name }}
+          releaseBody: |
+            Installation et premier lancement : voir le README du dépôt.
+            Si l'application est déjà installée, elle propose la mise à jour toute seule.
+          releaseDraft: false
+          args: --target universal-apple-darwin
