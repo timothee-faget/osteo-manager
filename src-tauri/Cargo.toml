@@ -24,6 +24,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher"] }
 thiserror = "2.0.21"
+argon2 = "0.6.0"
+chacha20poly1305 = "0.11.0"
+hex = "0.4.3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -36,3 +39,10 @@ strip = true
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+# Argon2 is unusably slow unoptimized (64 MiB derivation at every unlock in `tauri dev`).
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
