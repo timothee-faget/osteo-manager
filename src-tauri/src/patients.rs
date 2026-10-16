@@ -397,10 +397,41 @@ pub fn get(conn: &Connection, id: i64, today: NaiveDate) -> Result<Patient> {
     Ok(patient)
 }
 
-/// Patients whose name contains every word of `query`, ignoring case and accents,
+fn digits(s: &str) -> String {
+    s.chars().filter(char::is_ascii_digit).collect()
+}
+
+/// Digits and separators only, as typed for a phone number or a date ("06 12", "12/05").
+fn is_numeric(s: &str) -> bool {
+    s.chars().any(|c| c.is_ascii_digit())
+        && s.chars().all(|c| c.is_ascii_digit() || " ./-+".contains(c))
+}
+
+/// Whether one search word matches the patient's name, birth date or phone.
+fn word_matches(word: &str, name_key: &str, birth_date: Option<&str>, phone_digits: &str) -> bool {
+    if name_key.contains(word) {
+        return true;
+    }
+    if let Some(iso) = birth_date {
+        let french = format!("{}/{}/{}", &iso[8..10], &iso[5..7], &iso[..4]);
+        if french.contains(word) || iso.contains(word) {
+            return true;
+        }
+    }
+    let d = digits(word);
+    is_numeric(word) && d.len() >= 2 && phone_digits.contains(&d)
+}
+
+/// Patients matching every word of `query` (name or first name ignoring case and accents,
+/// birth date as `12/05/1980`, `12/05` or `1980`, phone digits whatever the separators),
 /// sorted by last name then first name.
 pub fn list(conn: &Connection, query: &str, today: NaiveDate) -> Result<Vec<PatientSummary>> {
-    let words: Vec<String> = query.split_whitespace().map(normalize).collect();
+    // A query of digits and separators only is one number: "06 12 34" is a phone prefix.
+    let words: Vec<String> = if is_numeric(query.trim()) && query.trim().contains(' ') {
+        vec![digits(query)]
+    } else {
+        query.split_whitespace().map(normalize).collect()
+    };
     let mut stmt =
         conn.prepare("SELECT id, civility, last_name, first_name, birth_date, phone FROM patient")?;
     let mut patients: Vec<(String, PatientSummary)> = stmt
@@ -422,7 +453,12 @@ pub fn list(conn: &Connection, query: &str, today: NaiveDate) -> Result<Vec<Pati
         .collect::<rusqlite::Result<Vec<_>>>()?
         .into_iter()
         .map(|p| (normalize(&format!("{} {}", p.last_name, p.first_name)), p))
-        .filter(|(key, _)| words.iter().all(|w| key.contains(w.as_str())))
+        .filter(|(key, p)| {
+            let phone = digits(&p.phone);
+            words
+                .iter()
+                .all(|w| word_matches(w, key, p.birth_date.as_deref(), &phone))
+        })
         .collect();
     patients.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(patients.into_iter().map(|(_, p)| p).collect())
@@ -694,6 +730,39 @@ mod tests {
         assert_eq!(names("HEL"), ["Durand Hélio", "Lefèvre Hélène"]);
         assert_eq!(names("anne dup"), ["Dupont Anne"]);
         assert!(names("zzz").is_empty());
+    }
+
+    #[test]
+    fn search_by_birth_date_and_phone() {
+        let (_dir, mut c) = conn();
+        let today = day(TODAY);
+        let mut anne = input("Dupont", "Anne");
+        anne.birth_date = Some("1980-05-12".into());
+        anne.phone = "06 12 34 56 78".into();
+        create(&mut c, &anne, today).unwrap();
+        let mut leo = input("Petit", "Léo");
+        leo.birth_date = Some("2018-03-01".into());
+        leo.phone = "+33 7 98 76 54 32".into();
+        create(&mut c, &leo, today).unwrap();
+
+        let names = |q: &str| -> Vec<String> {
+            list(&c, q, today)
+                .unwrap()
+                .into_iter()
+                .map(|p| p.first_name)
+                .collect()
+        };
+        assert_eq!(names("12/05/1980"), ["Anne"]);
+        assert_eq!(names("12/05"), ["Anne"]);
+        assert_eq!(names("2018"), ["Léo"]);
+        assert_eq!(names("1980-05-12"), ["Anne"]);
+        assert_eq!(names("0612"), ["Anne"]);
+        assert_eq!(names("06 12 34"), ["Anne"]);
+        assert_eq!(names("06.12.34.56.78"), ["Anne"]);
+        assert_eq!(names("98 76"), ["Léo"]);
+        // Words combine: name and date must both match.
+        assert_eq!(names("dupont 1980"), ["Anne"]);
+        assert!(names("petit 1980").is_empty());
     }
 
     #[test]

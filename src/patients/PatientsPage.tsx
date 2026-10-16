@@ -14,8 +14,13 @@ import { SessionsSection } from "./SessionsSection";
 
 type View = { kind: "list" } | { kind: "new" } | { kind: "edit"; id: number };
 
-export function PatientsPage() {
-  const [view, setView] = useState<View>({ kind: "list" });
+/** `openPatientId` opens that record directly (from the quick search). */
+export function PatientsPage({ openPatientId }: { openPatientId?: number }) {
+  const [view, setView] = useState<View>(
+    openPatientId === undefined
+      ? { kind: "list" }
+      : { kind: "edit", id: openPatientId },
+  );
   const back = () => setView({ kind: "list" });
 
   switch (view.kind) {
