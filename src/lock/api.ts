@@ -52,6 +52,8 @@ const MESSAGES: Record<string, string> = {
   invalid_location_address_missing:
     "Ce lieu n'a pas d'adresse : ajoutez-la dans Paramètres avant de facturer.",
   invalid_invoice: "Facture introuvable.",
+  invalid_invoice_cancelled: "Cette facture est déjà annulée par un avoir.",
+  invalid_credit_note: "Avoir introuvable.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */

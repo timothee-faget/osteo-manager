@@ -179,6 +179,16 @@ pub fn clear_logo(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Raw logo and its MIME type, for documents.
+pub(crate) fn logo(conn: &Connection) -> Result<Option<(Vec<u8>, String)>> {
+    let (logo, mime): (Option<Vec<u8>>, Option<String>) = conn.query_row(
+        "SELECT logo, logo_mime FROM practitioner WHERE id = 1",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    Ok(logo.zip(mime))
+}
+
 /// `data:` URL for display, or `None` if no logo is set.
 pub fn logo_data_url(conn: &Connection) -> Result<Option<String>> {
     let (logo, mime): (Option<Vec<u8>>, Option<String>) = conn.query_row(

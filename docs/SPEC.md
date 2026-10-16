@@ -19,7 +19,7 @@
 - **Tauri 2** (app de bureau, auto-update intégré)
 - **React + TypeScript** (Vite) pour l'interface
 - **SQLite chiffrée** (SQLCipher) côté Rust, migrations versionnées
-- Génération PDF : à trancher dans l'issue dédiée
+- Génération PDF : crate `krilla` côté Rust, police Inter (OFL) embarquée
 - Envoi d'e-mails : SMTP depuis la boîte de la praticienne (crate `lettre`), identifiants dans le trousseau du système
 
 ## 3. Modules fonctionnels
@@ -146,4 +146,4 @@ Plusieurs années de données. Les formats sont décrits dans [legacy-data.md](l
 - [x] OS : **macOS**, sans signature Apple (contournement de Gatekeeper au premier lancement).
 - [x] Releases : binaires publiés dans un **repo public dédié**, le code reste privé.
 - [x] Fiches et Excel : structure analysée, voir [legacy-data.md](legacy-data.md).
-- [ ] Moteur de génération PDF (choix laissé au développement).
+- [x] Moteur de génération PDF : `krilla` (Rust), police Inter embarquée.

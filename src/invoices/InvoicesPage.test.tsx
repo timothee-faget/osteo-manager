@@ -1,0 +1,145 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
+import App from "../App";
+import { fakeBackend } from "../test/fakeBackend";
+import type { InvoiceView } from "./api";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
+
+beforeEach(() => {
+  vi.mocked(invoke).mockReset();
+  vi.mocked(open).mockReset();
+  vi.mocked(save).mockReset();
+  vi.mocked(check).mockReset().mockResolvedValue(null);
+  URL.createObjectURL = vi.fn(() => "blob:pdf");
+  URL.revokeObjectURL = vi.fn();
+});
+
+/** Fictitious issued invoice. */
+const INVOICE: InvoiceView = {
+  id: 1,
+  number: "2026-10-001",
+  session_id: 1,
+  patient_id: 1,
+  issued_on: "2026-10-16",
+  service_date: "2026-10-16",
+  label: "Consultation d'ostéopathie",
+  amount_cents: 6000,
+  patient_civility: "mme",
+  patient_name: "Anne Dupont",
+  location_name: "Cabinet",
+  sent_at: null,
+  credit_note: null,
+};
+
+async function setup(invoices: InvoiceView[] = [{ ...INVOICE }]) {
+  const user = userEvent.setup();
+  const state = fakeBackend("unlocked");
+  state.invoices = invoices;
+  render(<App />);
+  await user.click(await screen.findByRole("button", { name: "Factures" }));
+  return { user, state };
+}
+
+async function openInvoice(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "2026-10-001" }));
+  return within(
+    (
+      await screen.findByRole("heading", { name: /^Facture 2026-10-001/ })
+    ).closest(".invoice-detail") as HTMLElement,
+  );
+}
+
+test("aucune facture", async () => {
+  await setup([]);
+  expect(await screen.findByText(/Aucune facture/)).toBeInTheDocument();
+});
+
+test("liste puis aperçu du PDF", async () => {
+  const { user } = await setup();
+  const row = (
+    await screen.findByRole("button", { name: "2026-10-001" })
+  ).closest("tr")!;
+  expect(within(row).getByText("Anne Dupont")).toBeInTheDocument();
+  expect(within(row).getByText("60,00 €")).toBeInTheDocument();
+  expect(within(row).getByText("Non envoyée")).toBeInTheDocument();
+
+  const d = await openInvoice(user);
+  await user.click(d.getByRole("button", { name: "Voir le PDF" }));
+  expect(await d.findByTitle("Facture 2026-10-001")).toHaveAttribute(
+    "src",
+    "blob:pdf",
+  );
+  expect(invoke).toHaveBeenCalledWith("get_invoice_pdf", { id: 1 });
+});
+
+test("enregistrement du PDF à l'emplacement choisi", async () => {
+  const { user } = await setup();
+  const d = await openInvoice(user);
+
+  vi.mocked(save).mockResolvedValue(null);
+  await user.click(d.getByRole("button", { name: "Enregistrer le PDF…" }));
+  expect(invoke).not.toHaveBeenCalledWith(
+    "save_invoice_pdf",
+    expect.anything(),
+  );
+
+  vi.mocked(save).mockResolvedValue("/Users/x/Facture 2026-10-001.pdf");
+  await user.click(d.getByRole("button", { name: "Enregistrer le PDF…" }));
+  expect(await d.findByRole("status")).toHaveTextContent("PDF enregistré.");
+  expect(save).toHaveBeenCalledWith(
+    expect.objectContaining({ defaultPath: "Facture 2026-10-001.pdf" }),
+  );
+  expect(invoke).toHaveBeenCalledWith("save_invoice_pdf", {
+    id: 1,
+    path: "/Users/x/Facture 2026-10-001.pdf",
+  });
+});
+
+test("statut d'envoi", async () => {
+  const { user, state } = await setup();
+  const d = await openInvoice(user);
+  await user.click(d.getByRole("button", { name: "Marquer comme envoyée" }));
+  expect(await screen.findByText("Envoyée le 16/10/2026")).toBeInTheDocument();
+  expect(state.invoices[0].sent_at).not.toBeNull();
+
+  await user.click(
+    await d.findByRole("button", { name: "Marquer comme non envoyée" }),
+  );
+  expect(await screen.findByText("Non envoyée")).toBeInTheDocument();
+});
+
+test("annulation par un avoir", async () => {
+  const { user, state } = await setup();
+  const d = await openInvoice(user);
+  await user.click(d.getByRole("button", { name: "Annuler par un avoir…" }));
+  expect(d.getByText(/La séance redeviendra modifiable/)).toBeInTheDocument();
+  await user.type(
+    d.getByLabelText("Motif de l'annulation (facultatif)"),
+    "Erreur de tarif",
+  );
+  await user.click(d.getByRole("button", { name: "Émettre l'avoir" }));
+
+  expect(await d.findByRole("status")).toHaveTextContent(
+    "Avoir AV-2026-10-001 émis.",
+  );
+  expect(screen.getByText("Annulée (AV-2026-10-001)")).toBeInTheDocument();
+  expect(
+    await d.findByText(
+      /Annulée par l'avoir AV-2026-10-001 du 20\/10\/2026 \(motif : Erreur de tarif\)/,
+    ),
+  ).toBeInTheDocument();
+  expect(state.invoices[0].credit_note?.reason).toBe("Erreur de tarif");
+  expect(
+    d.queryByRole("button", { name: "Annuler par un avoir…" }),
+  ).not.toBeInTheDocument();
+
+  await user.click(d.getByRole("button", { name: "Voir l'avoir" }));
+  expect(await d.findByTitle("Avoir AV-2026-10-001")).toBeInTheDocument();
+  expect(invoke).toHaveBeenCalledWith("get_credit_note_pdf", { id: 1 });
+});
