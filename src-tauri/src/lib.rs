@@ -3,11 +3,15 @@ pub mod backup;
 pub mod db;
 pub mod invoices;
 pub mod patients;
+pub mod payments;
 pub mod pdf;
 pub mod session;
 pub mod sessions;
 pub mod settings;
 pub mod vault;
+
+#[cfg(test)]
+mod test_support;
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -84,6 +88,7 @@ pub fn run() {
             sessions::update_session,
             sessions::delete_session,
             sessions::validate_session,
+            invoices::get_invoice,
             invoices::list_invoices,
             invoices::get_invoice_pdf,
             invoices::save_invoice_pdf,
@@ -91,6 +96,9 @@ pub fn run() {
             invoices::save_credit_note_pdf,
             invoices::cancel_invoice,
             invoices::set_invoice_sent,
+            payments::list_payments,
+            payments::add_payment,
+            payments::delete_payment,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

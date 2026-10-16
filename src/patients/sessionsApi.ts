@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PaymentStatus } from "../invoices/paymentsApi";
 
 export type SessionInput = {
   patient_id: number;
@@ -16,7 +17,9 @@ export type SessionInput = {
 export type Session = SessionInput & {
   id: number;
   validated_at: string | null;
+  invoice_id: number | null;
   invoice_number: string | null;
+  payment_status: PaymentStatus | null;
   created_at: string;
   updated_at: string;
 };

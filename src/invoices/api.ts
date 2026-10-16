@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import type { PaymentStatus } from "./paymentsApi";
 
 export type CreditNote = {
   id: number;
@@ -25,6 +26,8 @@ export type InvoiceView = {
   location_name: string;
   sent_at: string | null;
   credit_note: CreditNote | null;
+  paid_cents: number;
+  payment_status: PaymentStatus;
 };
 
 /** Asks where to save; `false` if the user cancels. */
@@ -40,6 +43,7 @@ async function savePdf(command: string, id: number, defaultPath: string) {
 }
 
 export const invoicesApi = {
+  get: (id: number) => invoke<InvoiceView>("get_invoice", { id }),
   list: () => invoke<InvoiceView[]>("list_invoices"),
   pdf: (id: number) => invoke<ArrayBuffer>("get_invoice_pdf", { id }),
   savePdf: (i: InvoiceView) =>

@@ -54,6 +54,12 @@ const MESSAGES: Record<string, string> = {
   invalid_invoice: "Facture introuvable.",
   invalid_invoice_cancelled: "Cette facture est déjà annulée par un avoir.",
   invalid_credit_note: "Avoir introuvable.",
+  invalid_payment_amount: "Le montant doit être supérieur à zéro.",
+  invalid_payment_amount_format:
+    "Montant invalide : saisissez un montant, par exemple 60 ou 60,50.",
+  invalid_overpayment: "Le montant dépasse le reste à payer.",
+  invalid_received_on: "La date d'encaissement est invalide ou dans le futur.",
+  invalid_payment: "Paiement introuvable.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */

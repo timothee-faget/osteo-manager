@@ -11,6 +11,7 @@ import type { Patient } from "../patients/api";
 import type { Attachment } from "../patients/attachmentsApi";
 import type { Session } from "../patients/sessionsApi";
 import type { InvoiceView } from "../invoices/api";
+import type { Payment } from "../invoices/paymentsApi";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -49,6 +50,19 @@ export function fakeBackend(initial: LockStatus) {
     invoiceSeq: 0,
     invoices: [] as InvoiceView[],
     creditSeq: 0,
+    payments: [] as Payment[],
+  };
+  const paidOf = (id: number) =>
+    state.payments
+      .filter((p) => p.invoice_id === id)
+      .reduce((sum, p) => sum + p.amount_cents, 0);
+  const statusOf = (amount: number, paid: number) =>
+    paid >= amount ? "paid" : paid > 0 ? "partially_paid" : "unpaid";
+  /** Invoice with its payment fields recomputed. */
+  const withPayments = (i: InvoiceView): InvoiceView => {
+    i.paid_cents = paidOf(i.id);
+    i.payment_status = statusOf(i.amount_cents, i.paid_cents);
+    return i;
   };
   const fold = (x: string) =>
     x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -220,6 +234,14 @@ export function fakeBackend(initial: LockStatus) {
       case "read_attachment":
         return new Uint8Array([1, 2, 3]).buffer;
       case "list_sessions":
+        state.sessions.forEach((s) => {
+          if (s.invoice_id !== null) {
+            const i = withPayments(
+              state.invoices.find((x) => x.id === s.invoice_id)!,
+            );
+            s.payment_status = i.payment_status;
+          }
+        });
         return state.sessions
           .filter((x) => x.patient_id === a.patientId)
           .sort((x, y) => y.starts_at.localeCompare(x.starts_at));
@@ -234,7 +256,9 @@ export function fakeBackend(initial: LockStatus) {
           ...a.session,
           id: state.sessions.length + 1,
           validated_at: null,
+          invoice_id: null,
           invoice_number: null,
+          payment_status: null,
           created_at: "2026-10-16T10:00:00",
           updated_at: "2026-10-16T10:00:00",
         };
@@ -255,11 +279,49 @@ export function fakeBackend(initial: LockStatus) {
         const x = state.sessions.find((s) => s.id === a.id)!;
         state.invoiceSeq += 1;
         x.validated_at = "2026-10-16T10:05:00";
+        x.invoice_id = state.invoiceSeq;
         x.invoice_number = `2026-10-${String(state.invoiceSeq).padStart(3, "0")}`;
+        x.payment_status = "unpaid";
+        state.invoices.push({
+          id: state.invoiceSeq,
+          number: x.invoice_number,
+          session_id: x.id,
+          patient_id: x.patient_id,
+          issued_on: "2026-10-16",
+          service_date: x.starts_at.slice(0, 10),
+          label: "Consultation d'ostéopathie",
+          amount_cents: x.fee_cents,
+          patient_civility: null,
+          patient_name: "Anne Dupont",
+          location_name: "Cabinet",
+          sent_at: null,
+          credit_note: null,
+          paid_cents: 0,
+          payment_status: "unpaid",
+        });
         return x;
       }
       case "list_invoices":
-        return [...state.invoices].reverse();
+        return [...state.invoices].reverse().map(withPayments);
+      case "get_invoice":
+        return withPayments(state.invoices.find((x) => x.id === a.id)!);
+      case "list_payments":
+        return state.payments.filter((p) => p.invoice_id === a.invoiceId);
+      case "add_payment": {
+        const i = state.invoices.find((x) => x.id === a.payment.invoice_id)!;
+        if (paidOf(i.id) + a.payment.amount_cents > i.amount_cents)
+          throw { code: "invalid_overpayment" };
+        const p = {
+          ...a.payment,
+          id: state.payments.length + 1,
+          created_at: "2026-10-16T10:00:00",
+        };
+        state.payments.push(p);
+        return p;
+      }
+      case "delete_payment":
+        state.payments = state.payments.filter((p) => p.id !== a.id);
+        return;
       case "get_invoice_pdf":
       case "get_credit_note_pdf":
         return new Uint8Array([37, 80, 68, 70]).buffer;

@@ -246,3 +246,16 @@ summary {
   flex-direction: column;
   gap: 0.75rem;
 }
+
+.payments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.payment-form {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}

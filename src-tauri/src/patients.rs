@@ -12,7 +12,7 @@ use unicode_normalization::char::is_combining_mark;
 
 use crate::session::{SessionError, State};
 use crate::settings::is_plausible_email;
-use crate::{attachments, invoices, sessions};
+use crate::{attachments, invoices, payments, sessions};
 
 type Result<T> = std::result::Result<T, SessionError>;
 
@@ -436,6 +436,7 @@ pub fn export(conn: &Connection, id: i64, today: NaiveDate) -> Result<serde_json
         "patient": get(conn, id, today)?,
         "sessions": sessions::list_for_patient(conn, id)?,
         "invoices": invoices::list_for_patient(conn, id)?,
+        "payments": payments::list_for_patient(conn, id)?,
         "attachments": attachments::list(conn, id)?,
     }))
 }

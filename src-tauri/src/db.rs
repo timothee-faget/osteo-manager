@@ -231,6 +231,18 @@ pub const MIGRATIONS: &[&str] = &[
             OR NEW.starts_at IS NOT OLD.starts_at OR NEW.fee_cents IS NOT OLD.fee_cents
             OR NEW.validated_at IS NOT OLD.validated_at)
         BEGIN SELECT RAISE(ABORT, 'invoiced session billing fields are locked'); END;",
+    // v7: payments. `received_on` is the cash-basis date: revenue counts on that day.
+    "CREATE TABLE payment (
+        id INTEGER PRIMARY KEY,
+        invoice_id INTEGER NOT NULL REFERENCES invoice (id),
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        method TEXT NOT NULL CHECK (method IN ('cheque', 'wero', 'cash', 'transfer')),
+        received_on TEXT NOT NULL,
+        reference TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX payment_invoice ON payment (invoice_id);
+    CREATE INDEX payment_received_on ON payment (received_on);",
 ];
 
 #[derive(Debug, thiserror::Error)]

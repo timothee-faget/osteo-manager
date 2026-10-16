@@ -126,13 +126,10 @@ test("valider émet la facture après confirmation et verrouille la facturation"
   expect(await s.findByRole("status")).toHaveTextContent(
     "Facture 2026-10-001 émise.",
   );
-  expect(s.getByText("2026-10-001")).toBeInTheDocument();
+  expect(s.getByText("2026-10-001 · Impayée")).toBeInTheDocument();
   expect(state.sessions[0].validated_at).not.toBeNull();
 
-  // Reopened: billing fields are locked, notes are not.
-  await user.click(
-    s.getAllByRole("button", { name: /^\d{2}\/\d{2}\/\d{4} à/ })[0],
-  );
+  // The session stays open, locked for billing, with the payment form.
   expect(await s.findByLabelText("Date et heure")).toBeDisabled();
   expect(s.getByLabelText("Lieu")).toBeDisabled();
   expect(s.queryByLabelText("Tarif")).not.toBeInTheDocument();
@@ -193,4 +190,34 @@ test("suppression d'un brouillon avec confirmation", async () => {
   await user.click(s.getByRole("button", { name: "Confirmer la suppression" }));
   expect(await s.findByText("Aucune séance.")).toBeInTheDocument();
   expect(state.sessions).toHaveLength(0);
+});
+
+test("encaissement juste après la facturation", async () => {
+  const { user, state, s } = await setup();
+  await newSession(user, s, "Lombalgie");
+  await user.click(s.getByRole("button", { name: "Valider et facturer" }));
+  await user.click(
+    s.getByRole("button", { name: "Confirmer et émettre la facture" }),
+  );
+  expect(await s.findByText("Paiement : Impayée")).toBeInTheDocument();
+  expect(s.getByLabelText("Montant encaissé")).toHaveValue("60,00");
+
+  await user.clear(s.getByLabelText("Montant encaissé"));
+  await user.type(s.getByLabelText("Montant encaissé"), "40");
+  await user.selectOptions(s.getByLabelText("Mode"), "Espèces");
+  await user.click(s.getByRole("button", { name: "Enregistrer le paiement" }));
+  expect(
+    await s.findByText("Paiement : Partiellement payée (reste 20,00 €)"),
+  ).toBeInTheDocument();
+  // The form now suggests the remaining amount.
+  expect(s.getByLabelText("Montant encaissé")).toHaveValue("20,00");
+
+  await user.click(s.getByRole("button", { name: "Enregistrer le paiement" }));
+  expect(await s.findByText("Paiement : Payée")).toBeInTheDocument();
+  expect(s.queryByLabelText("Montant encaissé")).not.toBeInTheDocument();
+  expect(await s.findByText("2026-10-001 · Payée")).toBeInTheDocument();
+  expect(state.payments.map((p) => [p.amount_cents, p.method])).toEqual([
+    [4000, "cash"],
+    [2000, "cheque"],
+  ]);
 });

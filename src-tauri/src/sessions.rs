@@ -7,6 +7,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 
 use crate::invoices::{self, Invoice};
+use crate::payments::PaymentStatus;
 use crate::session::{SessionError, State};
 use crate::settings::{self, LocationKind};
 
@@ -40,7 +41,10 @@ pub struct Session {
     #[serde(flatten)]
     pub data: SessionInput,
     pub validated_at: Option<String>,
+    /// The current (non-cancelled) invoice.
+    pub invoice_id: Option<i64>,
     pub invoice_number: Option<String>,
+    pub payment_status: Option<PaymentStatus>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -50,8 +54,9 @@ fn now() -> String {
 }
 
 const COLUMNS: &str = "s.id, s.patient_id, s.location_id, s.starts_at, s.reason, s.anamnesis,
-    s.examination, s.treatment, s.advice, s.fee_cents, s.validated_at, i.number,
-    s.created_at, s.updated_at";
+    s.examination, s.treatment, s.advice, s.fee_cents, s.validated_at, i.id, i.number,
+    s.created_at, s.updated_at, i.amount_cents,
+    (SELECT COALESCE(SUM(p.amount_cents), 0) FROM payment p WHERE p.invoice_id = i.id)";
 /// Joins the session's current (non-cancelled) invoice, if any.
 const FROM: &str = "session s LEFT JOIN invoice i ON i.session_id = s.id
     AND NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)";
@@ -71,9 +76,14 @@ fn from_row(r: &Row) -> rusqlite::Result<Session> {
             fee_cents: r.get(9)?,
         },
         validated_at: r.get(10)?,
-        invoice_number: r.get(11)?,
-        created_at: r.get(12)?,
-        updated_at: r.get(13)?,
+        invoice_id: r.get(11)?,
+        invoice_number: r.get(12)?,
+        created_at: r.get(13)?,
+        updated_at: r.get(14)?,
+        payment_status: r
+            .get::<_, Option<i64>>(15)?
+            .map(|amount| r.get(16).map(|paid| PaymentStatus::of(amount, paid)))
+            .transpose()?,
     })
 }
 
@@ -282,104 +292,8 @@ pub fn validate_session(state: State, id: i64) -> Result<Session> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::patients::{self, PatientInput};
-    use crate::settings::{LocationInput, Practitioner};
-
-    const KEY: [u8; crate::db::KEY_LEN] = [7; crate::db::KEY_LEN];
-
-    struct Fixture {
-        _dir: tempfile::TempDir,
-        conn: Connection,
-        patient: i64,
-        practice: i64,
-        home: i64,
-    }
-
-    fn day(s: &str) -> NaiveDate {
-        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
-    }
-
-    /// Fictitious practitioner, patient and locations.
-    fn fixture() -> Fixture {
-        let dir = tempfile::tempdir().unwrap();
-        let mut conn = crate::db::open(&dir.path().join("osteo.db"), &KEY).unwrap();
-        settings::save_practitioner(
-            &conn,
-            &Practitioner {
-                last_name: "Martin".into(),
-                first_name: "Claire".into(),
-                rpps: "10000000009".into(),
-                siret: "12345678900015".into(),
-                address: "1 rue des Lilas, 75000 Paris".into(),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        let location = |name: &str, kind, address: &str| {
-            settings::create_location(
-                &conn,
-                &LocationInput {
-                    name: name.into(),
-                    kind,
-                    address: address.into(),
-                    retrocession_rate_bp: 0,
-                },
-            )
-            .unwrap()
-            .id
-        };
-        let practice = location("Cabinet", LocationKind::Practice, "2 place du Marché");
-        let home = location("Domicile", LocationKind::HomeVisit, "");
-        let patient = patients::create(
-            &mut conn,
-            &PatientInput {
-                civility: Some(patients::Civility::Mme),
-                last_name: "Dupont".into(),
-                first_name: "Anne".into(),
-                address: "3 allée des Pins".into(),
-                ..Default::default()
-            },
-            day("2026-10-16"),
-        )
-        .unwrap()
-        .id;
-        Fixture {
-            _dir: dir,
-            conn,
-            patient,
-            practice,
-            home,
-        }
-    }
-
-    impl Fixture {
-        fn input(&self, starts_at: &str) -> SessionInput {
-            SessionInput {
-                patient_id: self.patient,
-                location_id: self.practice,
-                starts_at: starts_at.into(),
-                reason: "Lombalgie".into(),
-                treatment: "Ttt iliaque D".into(),
-                fee_cents: 6000,
-                ..Default::default()
-            }
-        }
-
-        fn session(&self, starts_at: &str) -> Session {
-            create(&self.conn, &self.input(starts_at)).unwrap()
-        }
-
-        fn validate(&mut self, id: i64, on: &str) -> Result<(Session, Invoice)> {
-            validate(&mut self.conn, id, day(on))
-        }
-    }
-
-    fn invalid_field<T: std::fmt::Debug>(r: Result<T>) -> &'static str {
-        match r {
-            Err(SessionError::Invalid(field)) => field,
-            other => panic!("expected a validation error, got {other:?}"),
-        }
-    }
+    use crate::settings::LocationInput;
+    use crate::test_support::{day, fixture, invalid_field};
 
     #[test]
     fn default_fee_depends_on_the_location_kind() {
