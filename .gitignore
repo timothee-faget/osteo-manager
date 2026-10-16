@@ -32,3 +32,8 @@ src-tauri/gen/
 # Claude Code (local)
 .claude/settings.local.json
 .venv/
+
+# Logs / Vite
+*.log
+dist-ssr/
+*.local
