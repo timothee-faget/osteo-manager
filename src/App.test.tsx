@@ -1,16 +1,24 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import App from "./App";
 import type { LockStatus } from "./lock/api";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 const RECOVERY_KEY = "ABCD-0000-0000-0000-0000-0000-0000-0000";
 
 /** In-memory stand-in for the Rust session commands. */
 function fakeBackend(initial: LockStatus) {
-  const state = { status: initial, password: "correct horse", autoLock: 10 };
+  const state = {
+    status: initial,
+    password: "correct horse",
+    autoLock: 10,
+    backupFolder: null as string | null,
+    lastBackup: null as string | null,
+  };
   vi.mocked(invoke).mockImplementation(async (cmd, args) => {
     const a = (args ?? {}) as Record<string, string>;
     switch (cmd) {
@@ -40,6 +48,23 @@ function fakeBackend(initial: LockStatus) {
         return;
       case "print_page":
         return;
+      case "backup_status":
+        return {
+          folder: state.backupFolder,
+          last_backup: state.lastBackup,
+          last_error: null,
+        };
+      case "set_backup_folder":
+        state.backupFolder = a.folder;
+        state.lastBackup = "2026-10-16T18:30:00";
+        return;
+      case "backup_now":
+        state.lastBackup = "2026-10-16T19:00:00";
+        return;
+      case "restore_backup":
+        if (!a.path.endsWith(".osteobackup")) throw { code: "invalid_backup" };
+        state.status = "locked";
+        return;
     }
     throw new Error(`unexpected command ${cmd}`);
   });
@@ -48,6 +73,7 @@ function fakeBackend(initial: LockStatus) {
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  vi.mocked(open).mockReset();
 });
 
 test("premier lancement : création du mot de passe puis clé de récupération", async () => {
@@ -184,4 +210,78 @@ test("enregistre le délai de verrouillage", async () => {
     "Délai enregistré.",
   );
   expect(state.autoLock).toBe(15);
+});
+
+test("choix du dossier de sauvegarde puis sauvegarde immédiate", async () => {
+  const user = userEvent.setup();
+  const state = fakeBackend("unlocked");
+  vi.mocked(open).mockResolvedValue("/Volumes/Disque/Osteo");
+  render(<App />);
+
+  expect(
+    await screen.findByText(/les données ne sont pas sauvegardées/),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Choisir le dossier…" }));
+
+  expect(await screen.findByText("/Volumes/Disque/Osteo")).toBeInTheDocument();
+  expect(
+    screen.getByText(/Dernière sauvegarde : 16 octobre 2026/),
+  ).toBeInTheDocument();
+  expect(state.backupFolder).toBe("/Volumes/Disque/Osteo");
+
+  await user.click(
+    screen.getByRole("button", { name: "Sauvegarder maintenant" }),
+  );
+  expect(await screen.findByText(/à 19:00/)).toBeInTheDocument();
+});
+
+test("premier lancement : restauration d'une sauvegarde", async () => {
+  const user = userEvent.setup();
+  fakeBackend("needs_setup");
+  vi.mocked(open).mockResolvedValue(
+    "/Volumes/Disque/osteo-2026-10-16.osteobackup",
+  );
+  render(<App />);
+
+  await user.click(
+    await screen.findByRole("button", { name: "Restaurer une sauvegarde…" }),
+  );
+  expect(await screen.findByLabelText("Mot de passe")).toBeInTheDocument();
+  expect(invoke).toHaveBeenCalledWith("restore_backup", {
+    path: "/Volumes/Disque/osteo-2026-10-16.osteobackup",
+  });
+});
+
+test("restaurer depuis l'accueil demande confirmation", async () => {
+  const user = userEvent.setup();
+  fakeBackend("unlocked");
+  vi.mocked(open).mockResolvedValue("/tmp/a.osteobackup");
+  render(<App />);
+
+  const restore = await screen.findByRole("button", {
+    name: "Restaurer une sauvegarde…",
+  });
+  await user.click(restore);
+  await user.click(await screen.findByRole("button", { name: "Annuler" }));
+  expect(invoke).not.toHaveBeenCalledWith("restore_backup", expect.anything());
+
+  await user.click(
+    screen.getByRole("button", { name: "Restaurer une sauvegarde…" }),
+  );
+  await user.click(await screen.findByRole("button", { name: "Restaurer" }));
+  expect(await screen.findByLabelText("Mot de passe")).toBeInTheDocument();
+});
+
+test("un fichier invalide affiche une erreur", async () => {
+  const user = userEvent.setup();
+  fakeBackend("needs_setup");
+  vi.mocked(open).mockResolvedValue("/tmp/photo.jpg");
+  render(<App />);
+
+  await user.click(
+    await screen.findByRole("button", { name: "Restaurer une sauvegarde…" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Ce fichier n'est pas une sauvegarde valide.",
+  );
 });

@@ -1,8 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { BackupSettings } from "./backup/BackupSettings";
 import { errorMessage, lockApi } from "./lock/api";
 import { useIdle } from "./lock/useIdle";
 
-function Home({ onLock }: { onLock: () => void }) {
+function Home({
+  onLock,
+  onRestored,
+}: {
+  onLock: () => void;
+  onRestored: () => void;
+}) {
   const [autoLock, setAutoLock] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -50,6 +57,7 @@ function Home({ onLock }: { onLock: () => void }) {
         <button type="submit">Enregistrer</button>
         {message && <p role="status">{message}</p>}
       </form>
+      <BackupSettings onRestored={onRestored} />
     </main>
   );
 }

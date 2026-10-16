@@ -33,6 +33,7 @@ function App() {
   }, []);
 
   const unlocked = () => setScreen({ kind: "unlocked" });
+  const locked = () => setScreen({ kind: "locked" });
 
   switch (screen.kind) {
     case "loading":
@@ -43,6 +44,7 @@ function App() {
           onCreated={(recoveryKey) =>
             setScreen({ kind: "recovery_key", recoveryKey })
           }
+          onRestored={locked}
         />
       );
     case "recovery_key":
@@ -64,7 +66,7 @@ function App() {
         />
       );
     case "unlocked":
-      return <Home onLock={lock} />;
+      return <Home onLock={lock} onRestored={locked} />;
   }
 }
 
