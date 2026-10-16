@@ -8,7 +8,10 @@ pub const KEY_LEN: usize = 32;
 
 /// Schema migrations, applied in order; `PRAGMA user_version` stores how many have run.
 /// Never edit a released migration: append a new one.
-pub const MIGRATIONS: &[&str] = &[];
+pub const MIGRATIONS: &[&str] = &[
+    // v1: app preferences (auto-lock delay…)
+    "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;",
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {

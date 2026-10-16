@@ -17,3 +17,72 @@
 .container {
   padding: 2rem;
 }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+label.checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+[role="alert"] {
+  color: #c62828;
+}
+
+.lock {
+  max-width: 28rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+button.link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.recovery-key {
+  font-family: ui-monospace, monospace;
+  font-size: 1.25rem;
+  letter-spacing: 0.05em;
+  word-break: break-all;
+}
+
+/* Only the recovery sheet is printed. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .recovery-sheet,
+  .recovery-sheet * {
+    visibility: visible;
+  }
+  .recovery-sheet {
+    position: absolute;
+    inset: 0;
+    color: #000;
+  }
+}
