@@ -35,6 +35,8 @@ const INVOICE: InvoiceView = {
   location_name: "Cabinet",
   sent_at: null,
   credit_note: null,
+  paid_cents: 0,
+  payment_status: "unpaid",
 };
 
 async function setup(invoices: InvoiceView[] = [{ ...INVOICE }]) {
@@ -142,4 +144,57 @@ test("annulation par un avoir", async () => {
   await user.click(d.getByRole("button", { name: "Voir l'avoir" }));
   expect(await d.findByTitle("Avoir AV-2026-10-001")).toBeInTheDocument();
   expect(invoke).toHaveBeenCalledWith("get_credit_note_pdf", { id: 1 });
+});
+
+test("paiement depuis la facture : dépassement refusé, statut, suppression", async () => {
+  const { user, state } = await setup();
+  const row = (
+    await screen.findByRole("button", { name: "2026-10-001" })
+  ).closest("tr")!;
+  expect(within(row).getByText("Impayée")).toBeInTheDocument();
+
+  const d = await openInvoice(user);
+  await user.clear(d.getByLabelText("Montant encaissé"));
+  await user.type(d.getByLabelText("Montant encaissé"), "70");
+  await user.click(d.getByRole("button", { name: "Enregistrer le paiement" }));
+  expect(await d.findByRole("alert")).toHaveTextContent(
+    "Le montant dépasse le reste à payer.",
+  );
+
+  await user.clear(d.getByLabelText("Montant encaissé"));
+  await user.type(d.getByLabelText("Montant encaissé"), "60");
+  await user.selectOptions(d.getByLabelText("Mode"), "Virement");
+  await user.type(d.getByLabelText("Référence (n° de chèque…)"), "VIR-123");
+  await user.click(d.getByRole("button", { name: "Enregistrer le paiement" }));
+  expect(await d.findByText("Paiement : Payée")).toBeInTheDocument();
+  expect(d.getByText("VIR-123")).toBeInTheDocument();
+  expect(await within(row).findByText("Payée")).toBeInTheDocument();
+  expect(state.payments[0]).toMatchObject({
+    amount_cents: 6000,
+    method: "transfer",
+    reference: "VIR-123",
+  });
+
+  await user.click(d.getByRole("button", { name: "Supprimer" }));
+  await user.click(d.getByRole("button", { name: "Confirmer la suppression" }));
+  expect(await d.findByText("Paiement : Impayée")).toBeInTheDocument();
+  expect(state.payments).toHaveLength(0);
+});
+
+test("pas de saisie de paiement sur une facture annulée", async () => {
+  const { user } = await setup([
+    {
+      ...INVOICE,
+      credit_note: {
+        id: 1,
+        number: "AV-2026-10-001",
+        invoice_id: 1,
+        issued_on: "2026-10-20",
+        amount_cents: 6000,
+        reason: "",
+      },
+    },
+  ]);
+  const d = await openInvoice(user);
+  expect(d.queryByLabelText("Montant encaissé")).not.toBeInTheDocument();
 });

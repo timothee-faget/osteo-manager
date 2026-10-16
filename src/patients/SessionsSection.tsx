@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PAYMENT_STATUSES } from "../invoices/paymentsApi";
 import { formatEuros } from "../money";
 import { SessionForm } from "./SessionForm";
 import { formatDateTime, sessionsApi, type Session } from "./sessionsApi";
@@ -18,11 +19,13 @@ export function SessionsSection({ patientId }: { patientId: number }) {
   }, [patientId]);
 
   async function done(saved: Session | null, wasInvoiced: boolean) {
-    setEditing(null);
+    const justInvoiced = saved?.invoice_number != null && !wasInvoiced;
+    // Right after invoicing, keep the session open to record the payment.
+    setEditing(justInvoiced ? saved : null);
     setMessage(
       saved === null
         ? "Séance supprimée."
-        : saved.invoice_number && !wasInvoiced
+        : justInvoiced
           ? `Facture ${saved.invoice_number} émise.`
           : "Séance enregistrée.",
     );
@@ -56,6 +59,7 @@ export function SessionsSection({ patientId }: { patientId: number }) {
             void done(s, editing !== "new" && editing.validated_at !== null)
           }
           onCancel={() => setEditing(null)}
+          onPaymentChange={() => void refresh()}
         />
       )}
       {sessions.length === 0 ? (
@@ -87,7 +91,11 @@ export function SessionsSection({ patientId }: { patientId: number }) {
                 </td>
                 <td>{s.reason}</td>
                 <td>{formatEuros(s.fee_cents)}</td>
-                <td>{s.invoice_number ?? "Non facturée"}</td>
+                <td>
+                  {s.invoice_number
+                    ? `${s.invoice_number} · ${PAYMENT_STATUSES[s.payment_status ?? "unpaid"]}`
+                    : "Non facturée"}
+                </td>
               </tr>
             ))}
           </tbody>

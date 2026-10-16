@@ -15,6 +15,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use crate::session::State;
 use serde::Serialize;
 
+use crate::payments::{self, PaymentStatus};
 use crate::pdf;
 use crate::session::SessionError;
 use crate::settings::{self, LocationKind};
@@ -67,6 +68,8 @@ pub struct InvoiceView {
     pub invoice: Invoice,
     pub sent_at: Option<String>,
     pub credit_note: Option<CreditNote>,
+    pub paid_cents: i64,
+    pub payment_status: PaymentStatus,
 }
 
 /// `2026-04-012`; the sequence widens past 999 rather than wrapping.
@@ -123,10 +126,13 @@ fn view(conn: &Connection, invoice: Invoice) -> Result<InvoiceView> {
         )
         .optional()?;
     let credit_note = credit_note_for(conn, invoice.id)?;
+    let paid_cents = payments::paid_cents(conn, invoice.id)?;
     Ok(InvoiceView {
+        payment_status: PaymentStatus::of(invoice.amount_cents, paid_cents),
         invoice,
         sent_at,
         credit_note,
+        paid_cents,
     })
 }
 
@@ -336,12 +342,14 @@ pub(crate) fn issue(conn: &Connection, session_id: i64, issued_on: NaiveDate) ->
 
 // --- Documents ---
 
-/// PDF of an invoice. Payments arrive with #11; until then no invoice shows as paid.
+/// PDF of an invoice, marked "acquittée" once fully paid.
 pub fn invoice_pdf(conn: &Connection, id: i64) -> Result<Vec<u8>> {
-    let invoice = get(conn, id)?;
+    let view = get_view(conn, id)?;
+    let paid = view.payment_status == PaymentStatus::Paid;
+    let invoice = view.invoice;
     let logo = settings::logo(conn)?;
     let logo = logo.as_ref().map(|(bytes, mime)| pdf::Logo { bytes, mime });
-    Ok(pdf::invoice(&invoice, false, logo.as_ref()))
+    Ok(pdf::invoice(&invoice, paid, logo.as_ref()))
 }
 
 pub fn credit_note_pdf(conn: &Connection, id: i64) -> Result<Vec<u8>> {
@@ -356,6 +364,11 @@ pub fn credit_note_pdf(conn: &Connection, id: i64) -> Result<Vec<u8>> {
 
 fn today() -> NaiveDate {
     Local::now().date_naive()
+}
+
+#[tauri::command]
+pub fn get_invoice(state: State, id: i64) -> Result<InvoiceView> {
+    get_view(state.lock().unwrap().conn()?, id)
 }
 
 #[tauri::command]

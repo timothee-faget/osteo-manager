@@ -3,6 +3,8 @@ import { errorMessage } from "../lock/api";
 import { formatEuros } from "../money";
 import { formatDate } from "../patients/api";
 import { invoicesApi, type InvoiceView } from "./api";
+import { PaymentPanel } from "./PaymentPanel";
+import { PAYMENT_STATUSES } from "./paymentsApi";
 
 type Preview = { title: string; url: string };
 
@@ -42,6 +44,7 @@ export function InvoicesPage() {
               <th>Date</th>
               <th>Patient</th>
               <th>Montant</th>
+              <th>Paiement</th>
               <th>Envoi</th>
             </tr>
           </thead>
@@ -65,6 +68,9 @@ export function InvoicesPage() {
                 <td>{formatDate(i.issued_on)}</td>
                 <td>{i.patient_name}</td>
                 <td>{formatEuros(i.amount_cents)}</td>
+                <td>
+                  {i.credit_note ? "—" : PAYMENT_STATUSES[i.payment_status]}
+                </td>
                 <td>
                   {i.sent_at
                     ? `Envoyée le ${formatDate(i.sent_at.slice(0, 10))}`
@@ -251,6 +257,7 @@ function InvoiceDetail({
       {message && (
         <p role={message.error ? "alert" : "status"}>{message.text}</p>
       )}
+      <PaymentPanel invoice={invoice} onChange={onChange} />
       {preview && (
         <figure className="attachment-preview">
           <figcaption>
