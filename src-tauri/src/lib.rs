@@ -5,6 +5,7 @@ pub mod invoices;
 pub mod patients;
 pub mod payments;
 pub mod pdf;
+pub mod search;
 pub mod session;
 pub mod sessions;
 pub mod settings;
@@ -99,6 +100,7 @@ pub fn run() {
             payments::list_payments,
             payments::add_payment,
             payments::delete_payment,
+            search::quick_search,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

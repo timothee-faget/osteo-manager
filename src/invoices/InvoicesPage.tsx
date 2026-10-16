@@ -8,9 +8,12 @@ import { PAYMENT_STATUSES } from "./paymentsApi";
 
 type Preview = { title: string; url: string };
 
-export function InvoicesPage() {
+/** `openInvoiceId` shows that invoice directly (from the quick search). */
+export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   const [invoices, setInvoices] = useState<InvoiceView[] | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(
+    openInvoiceId ?? null,
+  );
 
   const refresh = () => invoicesApi.list().then(setInvoices);
 

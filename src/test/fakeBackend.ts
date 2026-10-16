@@ -187,6 +187,27 @@ export function fakeBackend(initial: LockStatus) {
               is_minor,
             }),
           );
+      case "quick_search": {
+        const q = a.query.trim();
+        if (!q) return { patients: [], invoices: [] };
+        return {
+          patients: state.patients.filter((p) =>
+            fold(`${p.last_name} ${p.first_name}`).includes(fold(q)),
+          ),
+          invoices: /^[\d-]+$/.test(q)
+            ? state.invoices
+                .filter((i) => i.number.includes(q))
+                .map((i) => ({
+                  id: i.id,
+                  number: i.number,
+                  patient_name: i.patient_name,
+                  issued_on: i.issued_on,
+                  amount_cents: i.amount_cents,
+                  credit_note_number: null,
+                }))
+            : [],
+        };
+      }
       case "get_patient":
         return state.patients.find((p) => p.id === a.id);
       case "create_patient": {
