@@ -97,6 +97,64 @@ pub const MIGRATIONS: &[&str] = &[
         added_at TEXT NOT NULL
     ) STRICT;
     CREATE INDEX attachment_patient ON attachment (patient_id);",
+    // v5: sessions and invoices. Validating a session issues its invoice: the number
+    // (`AAAA-MM-NNN`, continuous per month of issue) and a snapshot of everything printed
+    // on it. Invoices are immutable; status changes (sending, payments) live elsewhere.
+    "CREATE TABLE session (
+        id INTEGER PRIMARY KEY,
+        patient_id INTEGER NOT NULL REFERENCES patient (id),
+        location_id INTEGER NOT NULL REFERENCES practice_location (id),
+        starts_at TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        anamnesis TEXT NOT NULL DEFAULT '',
+        examination TEXT NOT NULL DEFAULT '',
+        treatment TEXT NOT NULL DEFAULT '',
+        advice TEXT NOT NULL DEFAULT '',
+        fee_cents INTEGER NOT NULL CHECK (fee_cents >= 0),
+        validated_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX session_patient ON session (patient_id, starts_at);
+    -- Once invoiced, a session keeps what the invoice was built from; notes stay editable.
+    CREATE TRIGGER session_billing_locked BEFORE UPDATE ON session
+        WHEN OLD.validated_at IS NOT NULL AND (
+            NEW.patient_id IS NOT OLD.patient_id OR NEW.location_id IS NOT OLD.location_id
+            OR NEW.starts_at IS NOT OLD.starts_at OR NEW.fee_cents IS NOT OLD.fee_cents
+            OR NEW.validated_at IS NOT OLD.validated_at)
+        BEGIN SELECT RAISE(ABORT, 'validated session billing fields are locked'); END;
+
+    CREATE TABLE invoice (
+        id INTEGER PRIMARY KEY,
+        number TEXT NOT NULL UNIQUE,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+        seq INTEGER NOT NULL CHECK (seq >= 1),
+        session_id INTEGER NOT NULL UNIQUE REFERENCES session (id),
+        patient_id INTEGER NOT NULL REFERENCES patient (id),
+        issued_on TEXT NOT NULL,
+        service_date TEXT NOT NULL,
+        label TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+        practitioner_name TEXT NOT NULL,
+        practitioner_rpps TEXT NOT NULL,
+        practitioner_adeli TEXT NOT NULL,
+        practitioner_siret TEXT NOT NULL,
+        practitioner_address TEXT NOT NULL,
+        practitioner_phone TEXT NOT NULL,
+        practitioner_email TEXT NOT NULL,
+        location_name TEXT NOT NULL,
+        location_address TEXT NOT NULL,
+        patient_civility TEXT,
+        patient_name TEXT NOT NULL,
+        patient_address TEXT NOT NULL,
+        UNIQUE (year, month, seq)
+    ) STRICT;
+    CREATE INDEX invoice_patient ON invoice (patient_id);
+    CREATE TRIGGER invoice_immutable BEFORE UPDATE ON invoice
+        BEGIN SELECT RAISE(ABORT, 'invoices are immutable'); END;
+    CREATE TRIGGER invoice_undeletable BEFORE DELETE ON invoice
+        BEGIN SELECT RAISE(ABORT, 'invoices cannot be deleted'); END;",
 ];
 
 #[derive(Debug, thiserror::Error)]

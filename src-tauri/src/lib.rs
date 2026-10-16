@@ -1,8 +1,10 @@
 pub mod attachments;
 pub mod backup;
 pub mod db;
+pub mod invoices;
 pub mod patients;
 pub mod session;
+pub mod sessions;
 pub mod settings;
 pub mod vault;
 
@@ -75,6 +77,12 @@ pub fn run() {
             attachments::add_attachments,
             attachments::read_attachment,
             attachments::delete_attachment,
+            sessions::list_sessions,
+            sessions::default_session_fee,
+            sessions::create_session,
+            sessions::update_session,
+            sessions::delete_session,
+            sessions::validate_session,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

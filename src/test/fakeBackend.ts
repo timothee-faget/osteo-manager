@@ -9,6 +9,7 @@ import type {
 } from "../settings/api";
 import type { Patient } from "../patients/api";
 import type { Attachment } from "../patients/attachmentsApi";
+import type { Session } from "../patients/sessionsApi";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -43,6 +44,8 @@ export function fakeBackend(initial: LockStatus) {
     patients: [] as Patient[],
     attachments: [] as Attachment[],
     nextAttachmentId: 1,
+    sessions: [] as Session[],
+    invoiceSeq: 0,
   };
   const fold = (x: string) =>
     x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -213,6 +216,45 @@ export function fakeBackend(initial: LockStatus) {
       }
       case "read_attachment":
         return new Uint8Array([1, 2, 3]).buffer;
+      case "list_sessions":
+        return state.sessions
+          .filter((x) => x.patient_id === a.patientId)
+          .sort((x, y) => y.starts_at.localeCompare(x.starts_at));
+      case "default_session_fee": {
+        const l = state.locations.find((x) => x.id === a.locationId)!;
+        return l.kind === "home_visit"
+          ? state.billing.home_visit_fee_cents
+          : state.billing.standard_fee_cents;
+      }
+      case "create_session": {
+        const x: Session = {
+          ...a.session,
+          id: state.sessions.length + 1,
+          validated_at: null,
+          invoice_number: null,
+          created_at: "2026-10-16T10:00:00",
+          updated_at: "2026-10-16T10:00:00",
+        };
+        state.sessions.push(x);
+        return x;
+      }
+      case "update_session": {
+        const x = state.sessions.find((s) => s.id === a.id)!;
+        Object.assign(x, a.session);
+        return x;
+      }
+      case "delete_session":
+        state.sessions = state.sessions.filter((s) => s.id !== a.id);
+        return;
+      case "validate_session": {
+        if (!state.practitioner.last_name)
+          throw { code: "invalid_practitioner_incomplete" };
+        const x = state.sessions.find((s) => s.id === a.id)!;
+        state.invoiceSeq += 1;
+        x.validated_at = "2026-10-16T10:05:00";
+        x.invoice_number = `2026-10-${String(state.invoiceSeq).padStart(3, "0")}`;
+        return x;
+      }
       case "delete_attachment":
         state.attachments = state.attachments.filter((x) => x.id !== a.id);
         return;
