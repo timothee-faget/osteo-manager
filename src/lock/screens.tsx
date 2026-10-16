@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { RestoreButton } from "../backup/RestoreButton";
 import { errorMessage, lockApi, MIN_PASSWORD_CHARS } from "./api";
 
 /** Runs an async action with a busy flag and a French error message. */
@@ -93,8 +94,10 @@ function NewPasswordForm({
 
 export function SetupScreen({
   onCreated,
+  onRestored,
 }: {
   onCreated: (recoveryKey: string) => void;
+  onRestored: () => void;
 }) {
   return (
     <LockLayout title="Création du mot de passe">
@@ -108,6 +111,7 @@ export function SetupScreen({
           onCreated(await lockApi.createPassword(password))
         }
       />
+      <RestoreButton replacesData={false} onRestored={onRestored} />
     </LockLayout>
   );
 }

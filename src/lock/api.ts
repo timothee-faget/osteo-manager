@@ -10,6 +10,11 @@ const MESSAGES: Record<string, string> = {
   password_too_short: `Le mot de passe doit contenir au moins ${MIN_PASSWORD_CHARS} caractères.`,
   locked: "L'application est verrouillée.",
   invalid_delay: "Le délai doit être compris entre 1 et 120 minutes.",
+  invalid_backup: "Ce fichier n'est pas une sauvegarde valide.",
+  no_backup_folder: "Aucun dossier de sauvegarde n'est choisi.",
+  folder_not_found:
+    "Dossier de sauvegarde introuvable : le disque est-il branché ?",
+  backup_failed: "La sauvegarde a échoué.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */
