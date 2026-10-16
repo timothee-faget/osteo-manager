@@ -90,7 +90,7 @@ pub fn list(folder: &Path) -> Result<Vec<(NaiveDateTime, PathBuf)>, BackupError>
             backups.push((at, path));
         }
     }
-    backups.sort_by(|a, b| b.0.cmp(&a.0));
+    backups.sort_by_key(|b| std::cmp::Reverse(b.0));
     Ok(backups)
 }
 
