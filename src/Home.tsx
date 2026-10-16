@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { lockApi } from "./lock/api";
 import { useIdle } from "./lock/useIdle";
+import { PatientsPage } from "./patients/PatientsPage";
 import { SettingsPage } from "./settings/SettingsPage";
 
-type Page = "home" | "settings";
+type Page = "home" | "patients" | "settings";
 
-const PAGES: Record<Page, string> = { home: "Accueil", settings: "Paramètres" };
+const PAGES: Record<Page, string> = {
+  home: "Accueil",
+  patients: "Patients",
+  settings: "Paramètres",
+};
 
 function Home({
   onLock,
@@ -44,16 +49,16 @@ function Home({
         </button>
       </header>
       <main className="container">
-        {page === "home" ? (
+        {page === "home" && (
           <p>Le tableau de bord arrivera avec la comptabilité.</p>
-        ) : (
-          autoLock !== null && (
-            <SettingsPage
-              autoLock={autoLock}
-              onAutoLockChange={setAutoLock}
-              onRestored={onRestored}
-            />
-          )
+        )}
+        {page === "patients" && <PatientsPage />}
+        {page === "settings" && autoLock !== null && (
+          <SettingsPage
+            autoLock={autoLock}
+            onAutoLockChange={setAutoLock}
+            onRestored={onRestored}
+          />
         )}
       </main>
     </>

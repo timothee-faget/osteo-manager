@@ -26,6 +26,13 @@ const MESSAGES: Record<string, string> = {
   invalid_home_visit_fee: "Le tarif ne peut pas être négatif.",
   invalid_tax_provision: "Le taux doit être compris entre 0 et 100 %.",
   invalid_urssaf_provision: "Le taux doit être compris entre 0 et 100 %.",
+  invalid_last_name: "Le nom est obligatoire.",
+  invalid_first_name: "Le prénom est obligatoire.",
+  invalid_birth_date: "Date de naissance invalide.",
+  invalid_guardian_consent_date: "Date d'autorisation invalide.",
+  invalid_guardian_name: "Le nom du représentant légal est obligatoire.",
+  invalid_guardian_email: "E-mail du représentant légal invalide.",
+  invalid_patient: "Patient introuvable.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */

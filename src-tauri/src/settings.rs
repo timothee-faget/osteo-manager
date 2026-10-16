@@ -359,7 +359,7 @@ fn is_valid_siret(s: &str) -> bool {
     sum.is_multiple_of(10) || (s.starts_with(LA_POSTE_SIREN) && digit_sum().is_multiple_of(5))
 }
 
-fn is_plausible_email(s: &str) -> bool {
+pub(crate) fn is_plausible_email(s: &str) -> bool {
     match s.split_once('@') {
         Some((local, domain)) => {
             !local.is_empty() && domain.contains('.') && !s.contains(char::is_whitespace)

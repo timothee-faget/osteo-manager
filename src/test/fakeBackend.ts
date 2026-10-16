@@ -7,6 +7,7 @@ import type {
   PracticeLocation,
   Practitioner,
 } from "../settings/api";
+import type { Patient } from "../patients/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -38,7 +39,15 @@ export function fakeBackend(initial: LockStatus) {
       tax_provision_bp: 4500,
       urssaf_provision_bp: 2600,
     } as BillingSettings,
+    patients: [] as Patient[],
   };
+  const fold = (x: string) =>
+    x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  // Fake rule: born in 2009 or later.
+  const withMinor = (p: Omit<Patient, "is_minor">): Patient => ({
+    ...p,
+    is_minor: !!p.birth_date && p.birth_date >= "2009-01-01",
+  });
   vi.mocked(invoke).mockImplementation(async (cmd, args) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const a = (args ?? {}) as Record<string, any>;
@@ -130,6 +139,51 @@ export function fakeBackend(initial: LockStatus) {
         return state.billing;
       case "update_billing_settings":
         state.billing = a.settings;
+        return;
+      case "list_patients":
+        return state.patients
+          .filter((p) =>
+            fold(`${p.last_name} ${p.first_name}`).includes(fold(a.query)),
+          )
+          .map(
+            ({
+              id,
+              civility,
+              last_name,
+              first_name,
+              birth_date,
+              phone,
+              is_minor,
+            }) => ({
+              id,
+              civility,
+              last_name,
+              first_name,
+              birth_date,
+              phone,
+              is_minor,
+            }),
+          );
+      case "get_patient":
+        return state.patients.find((p) => p.id === a.id);
+      case "create_patient": {
+        if (!a.patient.last_name.trim()) throw { code: "invalid_last_name" };
+        const p = withMinor({
+          ...a.patient,
+          last_name: a.patient.last_name.trim(),
+          id: state.patients.length + 1,
+          created_at: "2026-10-16T10:00:00",
+          updated_at: "2026-10-16T10:00:00",
+        });
+        state.patients.push(p);
+        return p;
+      }
+      case "update_patient": {
+        const i = state.patients.findIndex((p) => p.id === a.id);
+        state.patients[i] = withMinor({ ...state.patients[i], ...a.patient });
+        return state.patients[i];
+      }
+      case "export_patient":
         return;
     }
     throw new Error(`unexpected command ${cmd}`);
