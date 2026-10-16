@@ -4,6 +4,11 @@ private/
 *.sqlite
 *.sqlite-*
 *.osteobak
+*.xls
+*.xlsx
+*.xlsm
+*.doc
+*.docx
 
 # Node
 node_modules/
@@ -26,3 +31,4 @@ src-tauri/gen/
 
 # Claude Code (local)
 .claude/settings.local.json
+.venv/
