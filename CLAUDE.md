@@ -27,4 +27,15 @@ Spec complète : @docs/SPEC.md
 
 ## Commandes
 
-_À compléter après le scaffold (issue M0)._
+```sh
+npm run tauri dev        # lancer l'app en dev
+npm run typecheck        # tsc
+npm run lint             # eslint + prettier --check
+npm run format           # prettier --write
+npm test                 # vitest
+
+cd src-tauri
+cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+```
+
+Un hook Claude Code (`.claude/hooks/format.sh`) formate automatiquement chaque fichier édité.

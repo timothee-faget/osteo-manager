@@ -1,0 +1,19 @@
+:root {
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #1f2328;
+  background-color: #f6f7f9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #e6e8eb;
+    background-color: #1c1e21;
+  }
+}
+
+.container {
+  padding: 2rem;
+}

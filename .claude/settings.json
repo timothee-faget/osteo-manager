@@ -14,7 +14,10 @@
       "Bash(gh issue list:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
-      "Bash(gh pr checks:*)"
+      "Bash(gh pr checks:*)",
+      "Bash(npm run format:*)",
+      "Bash(npm run tauri:*)",
+      "Bash(npx prettier:*)"
     ],
     "deny": [
       "Read(./private/**)",
@@ -23,6 +26,19 @@
       "Read(./**/*.osteobak)",
       "Read(./.env)",
       "Read(./.env.*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format.sh"
+          }
+        ]
+      }
     ]
   }
 }
