@@ -41,7 +41,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFFMEExM0ZFNDk3QUJCNTkKUldSWnUzcEovaE1LcmxPdTU1SGlKRWUyYWN2c3hlY2FQMDlvYzMraE5aTVhHY1d1TER2WjZ6NTQK",
       "endpoints": [
         "https://github.com/timothee-faget/osteo-manager-releases/releases/latest/download/latest.json"
       ]
