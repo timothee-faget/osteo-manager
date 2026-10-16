@@ -1,0 +1,28 @@
+# Données réelles — ne jamais committer
+private/
+*.db
+*.sqlite
+*.sqlite-*
+*.osteobak
+
+# Node
+node_modules/
+dist/
+
+# Rust / Tauri
+target/
+src-tauri/gen/
+
+# Env & secrets
+.env
+.env.*
+*.key
+
+# OS / éditeurs
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Claude Code (local)
+.claude/settings.local.json
