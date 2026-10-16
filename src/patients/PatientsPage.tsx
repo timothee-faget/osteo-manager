@@ -8,6 +8,7 @@ import {
   type Patient,
   type PatientSummary,
 } from "./api";
+import { AttachmentsSection } from "./AttachmentsSection";
 import { PatientForm } from "./PatientForm";
 
 type View = { kind: "list" } | { kind: "new" } | { kind: "edit"; id: number };
@@ -132,7 +133,8 @@ function PatientRecord({ id, onBack }: { id: number; onBack: () => void }) {
 
   async function exportRecord(p: Patient) {
     try {
-      if (await patientsApi.export(p)) setMessage("Dossier exporté.");
+      const folder = await patientsApi.export(p.id);
+      if (folder) setMessage(`Dossier exporté dans ${folder}`);
     } catch (e) {
       setMessage(errorMessage(e));
     }
@@ -164,6 +166,7 @@ function PatientRecord({ id, onBack }: { id: number; onBack: () => void }) {
           return p;
         }}
       />
+      <AttachmentsSection patientId={patient.id} />
     </section>
   );
 }

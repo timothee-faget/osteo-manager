@@ -83,6 +83,20 @@ pub const MIGRATIONS: &[&str] = &[
         email TEXT NOT NULL DEFAULT ''
     ) STRICT;
     CREATE INDEX patient_guardian_patient ON patient_guardian (patient_id);",
+    // v4: patient attachments. Each file is encrypted with its own random key, kept here
+    // (so in the encrypted database); `storage_name` is the random file name on disk.
+    "CREATE TABLE attachment (
+        id INTEGER PRIMARY KEY,
+        patient_id INTEGER NOT NULL REFERENCES patient (id),
+        file_name TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        storage_name TEXT NOT NULL UNIQUE,
+        key BLOB NOT NULL,
+        nonce BLOB NOT NULL,
+        added_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX attachment_patient ON attachment (patient_id);",
 ];
 
 #[derive(Debug, thiserror::Error)]

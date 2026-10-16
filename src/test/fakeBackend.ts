@@ -8,6 +8,7 @@ import type {
   Practitioner,
 } from "../settings/api";
 import type { Patient } from "../patients/api";
+import type { Attachment } from "../patients/attachmentsApi";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -40,6 +41,8 @@ export function fakeBackend(initial: LockStatus) {
       urssaf_provision_bp: 2600,
     } as BillingSettings,
     patients: [] as Patient[],
+    attachments: [] as Attachment[],
+    nextAttachmentId: 1,
   };
   const fold = (x: string) =>
     x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -184,6 +187,34 @@ export function fakeBackend(initial: LockStatus) {
         return state.patients[i];
       }
       case "export_patient":
+        return `${a.folder}/dossier-export`;
+      case "list_attachments":
+        return state.attachments
+          .filter((x) => x.patient_id === a.patientId)
+          .reverse();
+      case "add_attachments": {
+        const added: Attachment[] = [];
+        for (const path of a.paths as string[]) {
+          if (!/\.(pdf|jpe?g|png)$/.test(path))
+            throw { code: "invalid_attachment_type" };
+          const pdf = path.endsWith(".pdf");
+          const x = {
+            id: state.nextAttachmentId++,
+            patient_id: a.patientId,
+            file_name: path.split("/").pop()!,
+            mime: pdf ? "application/pdf" : "image/jpeg",
+            size: 2048,
+            added_at: "2026-10-16T10:00:00",
+          };
+          state.attachments.push(x);
+          added.push(x);
+        }
+        return added;
+      }
+      case "read_attachment":
+        return new Uint8Array([1, 2, 3]).buffer;
+      case "delete_attachment":
+        state.attachments = state.attachments.filter((x) => x.id !== a.id);
         return;
     }
     throw new Error(`unexpected command ${cmd}`);

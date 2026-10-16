@@ -1,7 +1,8 @@
 //! Patient records: identification, history and review of systems (free text, as in the
 //! Word files), plus legal guardians for minors. Records are never deleted.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use chrono::{Local, Months, NaiveDate};
 use rusqlite::{Connection, Row, params, params_from_iter};
@@ -9,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
+use crate::attachments;
 use crate::session::{SessionError, State};
 use crate::settings::is_plausible_email;
 
@@ -427,13 +429,49 @@ pub fn list(conn: &Connection, query: &str, today: NaiveDate) -> Result<Vec<Pati
 }
 
 /// The full record, for the patient's right of access and portability (GDPR art. 15 and 20).
-/// Sessions, invoices and attachments will join it as those modules land.
+/// Sessions and invoices will join it as those modules land.
 pub fn export(conn: &Connection, id: i64, today: NaiveDate) -> Result<serde_json::Value> {
     Ok(serde_json::json!({
         "format": "osteo-manager/patient-export/v1",
         "exported_at": now(),
         "patient": get(conn, id, today)?,
+        "attachments": attachments::list(conn, id)?,
     }))
+}
+
+/// Creates `dossier-<nom>-<prénom>-<date>/` in `parent` with `dossier.json` and the
+/// decrypted attachments in `pieces-jointes/`. Returns the folder created.
+pub fn export_to_folder(
+    conn: &Connection,
+    attachments_dir: &Path,
+    id: i64,
+    parent: &Path,
+    today: NaiveDate,
+) -> Result<PathBuf> {
+    let json = export(conn, id, today)?;
+    let p = get(conn, id, today)?.data;
+    let base = attachments::safe_file_name(&format!(
+        "dossier-{}-{}-{}",
+        p.last_name,
+        p.first_name,
+        today.format(DATE_FORMAT)
+    ));
+    let folder = (1..)
+        .map(|i| match i {
+            1 => parent.join(&base),
+            i => parent.join(format!("{base} ({i})")),
+        })
+        .find(|f| !f.exists())
+        .expect("an unused name exists");
+    fs::create_dir_all(&folder)?;
+    fs::write(
+        folder.join("dossier.json"),
+        serde_json::to_vec_pretty(&json).expect("JSON serializes"),
+    )?;
+    if !attachments::list(conn, id)?.is_empty() {
+        attachments::export(conn, attachments_dir, id, &folder.join("pieces-jointes"))?;
+    }
+    Ok(folder)
 }
 
 // --- Commands ---
@@ -466,14 +504,17 @@ pub fn update_patient(state: State, id: i64, patient: PatientInput) -> Result<Pa
     with_conn(&state, |c| update(c, id, &patient, today()))
 }
 
+/// Returns the folder created, to show it to the user.
 #[tauri::command]
-pub fn export_patient(state: State, id: i64, path: PathBuf) -> Result<()> {
-    let json = with_conn(&state, |c| export(c, id, today()))?;
-    std::fs::write(
-        path,
-        serde_json::to_vec_pretty(&json).expect("JSON serializes"),
-    )?;
-    Ok(())
+pub fn export_patient(state: State, id: i64, folder: PathBuf) -> Result<PathBuf> {
+    let session = state.lock().unwrap();
+    export_to_folder(
+        session.conn()?,
+        &session.attachments_dir(),
+        id,
+        &folder,
+        today(),
+    )
 }
 
 #[cfg(test)]
@@ -665,5 +706,36 @@ mod tests {
         assert_eq!(json["patient"]["last_name"], "Dupont");
         assert_eq!(json["patient"]["surgical_history"], "Appendicectomie 1995");
         assert_eq!(json["patient"]["guardians"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn folder_export_includes_decrypted_attachments() {
+        let (dir, mut c) = conn();
+        let today = day(TODAY);
+        let p = create(&mut c, &input("Dupont", "Anne"), today).unwrap();
+        let files = dir.path().join("attachments");
+        attachments::add(&c, &files, p.id, "ordonnance.pdf", b"%PDF-1.7 x").unwrap();
+        let dest = dir.path().join("exports");
+        fs::create_dir(&dest).unwrap();
+
+        let folder = export_to_folder(&c, &files, p.id, &dest, today).unwrap();
+        assert_eq!(
+            folder.file_name().unwrap(),
+            "dossier-Dupont-Anne-2026-10-16"
+        );
+        let json: serde_json::Value =
+            serde_json::from_slice(&fs::read(folder.join("dossier.json")).unwrap()).unwrap();
+        assert_eq!(json["attachments"][0]["file_name"], "ordonnance.pdf");
+        assert_eq!(
+            fs::read(folder.join("pieces-jointes").join("ordonnance.pdf")).unwrap(),
+            b"%PDF-1.7 x"
+        );
+
+        // A second export the same day does not overwrite the first.
+        let again = export_to_folder(&c, &files, p.id, &dest, today).unwrap();
+        assert_eq!(
+            again.file_name().unwrap(),
+            "dossier-Dupont-Anne-2026-10-16 (2)"
+        );
     }
 }
