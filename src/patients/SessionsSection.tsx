@@ -7,16 +7,29 @@ import { formatDateTime, sessionsApi, type Session } from "./sessionsApi";
 /** `null`: no form open; `"new"`: creating; otherwise the session being edited. */
 type Editing = null | "new" | Session;
 
-export function SessionsSection({ patientId }: { patientId: number }) {
+/** Opens right away the form of a new session (`startNew`) or of `openSessionId`. */
+export function SessionsSection({
+  patientId,
+  startNew,
+  openSessionId,
+}: {
+  patientId: number;
+  startNew?: boolean;
+  openSessionId?: number;
+}) {
   const [sessions, setSessions] = useState<Session[] | null>(null);
-  const [editing, setEditing] = useState<Editing>(null);
+  const [editing, setEditing] = useState<Editing>(startNew ? "new" : null);
   const [message, setMessage] = useState<string | null>(null);
 
   const refresh = () => sessionsApi.list(patientId).then(setSessions);
 
   useEffect(() => {
-    void sessionsApi.list(patientId).then(setSessions);
-  }, [patientId]);
+    void sessionsApi.list(patientId).then((list) => {
+      setSessions(list);
+      const open = list.find((s) => s.id === openSessionId);
+      if (open) setEditing(open);
+    });
+  }, [patientId, openSessionId]);
 
   async function done(saved: Session | null, wasInvoiced: boolean) {
     const justInvoiced = saved?.invoice_number != null && !wasInvoiced;

@@ -6,20 +6,50 @@ import {
   formatDate,
   patientsApi,
   type Patient,
+  type PatientInput,
   type PatientSummary,
 } from "./api";
 import { AttachmentsSection } from "./AttachmentsSection";
 import { PatientForm } from "./PatientForm";
 import { SessionsSection } from "./SessionsSection";
 
-type View = { kind: "list" } | { kind: "new" } | { kind: "edit"; id: number };
+type View =
+  | { kind: "list" }
+  | { kind: "new"; name: string }
+  | { kind: "edit"; id: number; newSession?: boolean; sessionId?: number };
 
-/** `openPatientId` opens that record directly (from the quick search). */
-export function PatientsPage({ openPatientId }: { openPatientId?: number }) {
+/** "Dupont Marie" → last name "Dupont", first name "Marie". */
+function fromName(name: string): PatientInput {
+  const [last_name, ...first] = name.trim().split(/\s+/);
+  return { ...EMPTY_PATIENT, last_name, first_name: first.join(" ") };
+}
+
+/**
+ * Opens directly, when given: the record `openPatientId` (with the form of a new
+ * session, or of `openSessionId`), or a new record pre-filled with `newPatientName`.
+ */
+export function PatientsPage({
+  openPatientId,
+  newSession,
+  openSessionId,
+  newPatientName,
+}: {
+  openPatientId?: number;
+  newSession?: boolean;
+  openSessionId?: number;
+  newPatientName?: string;
+}) {
   const [view, setView] = useState<View>(
-    openPatientId === undefined
-      ? { kind: "list" }
-      : { kind: "edit", id: openPatientId },
+    newPatientName !== undefined
+      ? { kind: "new", name: newPatientName }
+      : openPatientId !== undefined
+        ? {
+            kind: "edit",
+            id: openPatientId,
+            newSession,
+            sessionId: openSessionId,
+          }
+        : { kind: "list" },
   );
   const back = () => setView({ kind: "list" });
 
@@ -28,7 +58,7 @@ export function PatientsPage({ openPatientId }: { openPatientId?: number }) {
       return (
         <PatientList
           onOpen={(id) => setView({ kind: "edit", id })}
-          onNew={() => setView({ kind: "new" })}
+          onNew={() => setView({ kind: "new", name: "" })}
         />
       );
     case "new":
@@ -39,19 +69,28 @@ export function PatientsPage({ openPatientId }: { openPatientId?: number }) {
           </button>
           <h2>Nouveau patient</h2>
           <PatientForm
-            initial={EMPTY_PATIENT}
+            initial={fromName(view.name)}
             isMinor={false}
             submitLabel="Créer la fiche"
             onSubmit={async (input) => {
               const p = await patientsApi.create(input);
-              setView({ kind: "edit", id: p.id });
+              // A new patient is almost always seen right away.
+              setView({ kind: "edit", id: p.id, newSession: true });
               return p;
             }}
           />
         </section>
       );
     case "edit":
-      return <PatientRecord key={view.id} id={view.id} onBack={back} />;
+      return (
+        <PatientRecord
+          key={view.id}
+          id={view.id}
+          newSession={view.newSession}
+          sessionId={view.sessionId}
+          onBack={back}
+        />
+      );
   }
 }
 
@@ -129,7 +168,17 @@ function PatientList({
   );
 }
 
-function PatientRecord({ id, onBack }: { id: number; onBack: () => void }) {
+function PatientRecord({
+  id,
+  newSession,
+  sessionId,
+  onBack,
+}: {
+  id: number;
+  newSession?: boolean;
+  sessionId?: number;
+  onBack: () => void;
+}) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -147,6 +196,14 @@ function PatientRecord({ id, onBack }: { id: number; onBack: () => void }) {
   }
 
   if (!patient) return null;
+  const focusSession = newSession === true || sessionId !== undefined;
+  const sessions = (
+    <SessionsSection
+      patientId={patient.id}
+      startNew={newSession}
+      openSessionId={sessionId}
+    />
+  );
   return (
     <section>
       <button type="button" className="link" onClick={onBack}>
@@ -162,6 +219,8 @@ function PatientRecord({ id, onBack }: { id: number; onBack: () => void }) {
         </button>
       </header>
       {message && <p role="status">{message}</p>}
+      {/* Opened for a session: show it first, above the record. */}
+      {focusSession && sessions}
       <PatientForm
         initial={patient}
         isMinor={patient.is_minor}
@@ -172,7 +231,7 @@ function PatientRecord({ id, onBack }: { id: number; onBack: () => void }) {
           return p;
         }}
       />
-      <SessionsSection patientId={patient.id} />
+      {!focusSession && sessions}
       <AttachmentsSection patientId={patient.id} />
     </section>
   );

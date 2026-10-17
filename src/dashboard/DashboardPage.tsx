@@ -1,42 +1,53 @@
 import { useEffect, useState } from "react";
 import { formatMonth } from "../expenses/api";
 import { errorMessage } from "../lock/api";
+import { BatchSend } from "../mail/BatchSend";
 import { formatEuros } from "../money";
-import { formatDateTime, sessionsApi } from "../patients/sessionsApi";
 import {
-  dashboardApi,
-  type Dashboard,
-  type Period,
-  type UnbilledSession,
-} from "./api";
-
-const ROWS: [string, (p: Period) => string][] = [
-  ["CA encaissé", (p) => formatEuros(p.receipts_cents)],
-  ["Séances", (p) => String(p.sessions)],
-  ["Panier moyen", (p) => formatEuros(p.average_cents)],
-  ["Dépenses", (p) => formatEuros(p.expenses_cents)],
-  ["Rétrocessions", (p) => formatEuros(p.retrocessions_cents)],
-  ["Résultat estimé", (p) => formatEuros(p.result_cents)],
-  ["Provision impôt", (p) => formatEuros(p.tax_provision_cents)],
-  ["Provision URSSAF", (p) => formatEuros(p.urssaf_provision_cents)],
-];
+  formatDateTime,
+  SESSION_STATUSES,
+  sessionsApi,
+} from "../patients/sessionsApi";
+import { dashboardApi, type Dashboard, type UnbilledSession } from "./api";
+import { PatientSearch } from "./PatientSearch";
 
 const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
 
-/** Home page: key figures, what is left to collect or invoice, revenue by location. */
+/** "+8 % vs 2025", or nothing without last year's figure. */
+function evolution(now: number, before: number, year: number) {
+  if (before === 0) return null;
+  const pct = Math.round(((now - before) * 100) / before);
+  return `${pct > 0 ? "+" : ""}${pct} % vs ${year}`;
+}
+
+type Open = "unbilled" | "unsent" | "reminders" | null;
+
+/**
+ * Home page, for the two reasons to open the app: start a session, and deal with
+ * billing. Then a summary of the figures and the latest sessions.
+ */
 export function DashboardPage({
-  onOpenCollections,
   onOpenPatient,
+  onNewPatient,
+  onOpenCollections,
+  onOpenAccounting,
 }: {
+  onOpenPatient: (
+    id: number,
+    opts?: { newSession?: boolean; sessionId?: number },
+  ) => void;
+  onNewPatient: (name: string) => void;
   onOpenCollections: () => void;
-  onOpenPatient: (id: number) => void;
+  onOpenAccounting: () => void;
 }) {
   const [d, setD] = useState<Dashboard | null>(null);
-  const [showUnbilled, setShowUnbilled] = useState(false);
+  const [open, setOpen] = useState<Open>(null);
   const [confirm, setConfirm] = useState<UnbilledSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => dashboardApi.get().then(setD);
 
   useEffect(() => {
     void dashboardApi.get().then(setD);
@@ -49,7 +60,7 @@ export function DashboardPage({
     try {
       const saved = await sessionsApi.validate(s.session_id);
       setMessage(`Facture ${saved.invoice_number} émise.`);
-      setD(await dashboardApi.get());
+      await refresh();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -59,143 +70,251 @@ export function DashboardPage({
   }
 
   if (!d) return null;
-  const month = formatMonth(d.month.from.slice(0, 7));
-  const lastYear = Number(d.month.from.slice(0, 4)) - 1;
-  const columns: [string, Period][] = [
-    [month, d.month],
-    [formatMonth(d.month_last_year.from.slice(0, 7)), d.month_last_year],
-    ["Depuis le 1er janvier", d.year_to_date],
-    [`Même période ${lastYear}`, d.year_to_date_last_year],
-  ];
-  const yearReceipts = d.by_location.reduce((t, l) => t + l.receipts_cents, 0);
+  const year = Number(d.month.from.slice(0, 4));
+  const ytd = d.year_to_date;
+  const toggle = (o: Open) => setOpen(open === o ? null : o);
+
+  /** A to-do entry; greyed out once there is nothing left. */
+  const todo = (
+    count: number,
+    label: string,
+    done: string,
+    onClick: () => void,
+    o?: Open,
+  ) =>
+    count === 0 ? (
+      <button type="button" className="done" disabled>
+        ✓ {done}
+      </button>
+    ) : (
+      <button
+        type="button"
+        aria-expanded={o ? open === o : undefined}
+        onClick={onClick}
+      >
+        {label}
+      </button>
+    );
 
   return (
-    <section>
-      <h2>Tableau de bord</h2>
-      <table className="figures" aria-label="Chiffres clés">
-        <thead>
-          <tr>
-            <th />
-            {columns.map(([label]) => (
-              <th key={label}>{label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {ROWS.map(([label, value]) => (
-            <tr key={label}>
-              <th scope="row">{label}</th>
-              {columns.map(([col, p]) => (
-                <td key={col}>{value(p)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>
-        Résultat avant amortissements. Provisions : impôt sur le résultat,
-        URSSAF sur le CA net des rétrocessions, aux taux réglés dans Paramètres.
-      </p>
+    <section className="home">
+      <header>
+        <h2>Accueil</h2>
+        <button type="button" onClick={() => onNewPatient("")}>
+          Nouveau patient
+        </button>
+      </header>
+      <PatientSearch
+        onOpen={(id) => onOpenPatient(id)}
+        onNewSession={(id) => onOpenPatient(id, { newSession: true })}
+        onCreate={onNewPatient}
+      />
 
-      <h3>À traiter</h3>
-      <div className="todo">
-        <button type="button" onClick={onOpenCollections}>
-          Impayés : {plural(d.unpaid_count, "facture")},{" "}
-          {formatEuros(d.unpaid_cents)}
-        </button>
-        <button type="button" onClick={onOpenCollections}>
-          Chèques à remettre : {plural(d.cheques_to_deposit, "chèque")},{" "}
-          {formatEuros(d.cheques_to_deposit_cents)}
-        </button>
-        <button
-          type="button"
-          aria-expanded={showUnbilled}
-          onClick={() => setShowUnbilled(!showUnbilled)}
-        >
-          Séances non facturées : {plural(d.unbilled_sessions.length, "séance")}
-          , {formatEuros(d.unbilled_cents)}
-        </button>
+      <div className="home-grid">
+        <section>
+          <h3>À traiter</h3>
+          <div className="todo">
+            {todo(
+              d.unbilled_sessions.length,
+              `Séances non facturées : ${plural(d.unbilled_sessions.length, "séance")}, ${formatEuros(d.unbilled_cents)}`,
+              "Toutes les séances sont facturées",
+              () => toggle("unbilled"),
+              "unbilled",
+            )}
+            {todo(
+              d.unsent_count,
+              `Factures non envoyées : ${plural(d.unsent_count, "facture")}, ${formatEuros(d.unsent_cents)}`,
+              "Toutes les factures sont envoyées",
+              () => toggle("unsent"),
+              "unsent",
+            )}
+            {todo(
+              d.unpaid_count,
+              `Impayés : ${plural(d.unpaid_count, "facture")}, ${formatEuros(d.unpaid_cents)}`,
+              "Aucun impayé",
+              () => toggle("reminders"),
+              "reminders",
+            )}
+            {todo(
+              d.cheques_to_deposit,
+              `Chèques à remettre : ${plural(d.cheques_to_deposit, "chèque")}, ${formatEuros(d.cheques_to_deposit_cents)}`,
+              "Aucun chèque à remettre",
+              onOpenCollections,
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h3>Bilan</h3>
+          <dl className="cards">
+            <div>
+              <dt>CA encaissé en {formatMonth(d.month.from.slice(0, 7))}</dt>
+              <dd>{formatEuros(d.month.receipts_cents)}</dd>
+              <dd>
+                <small>
+                  {evolution(
+                    d.month.receipts_cents,
+                    d.month_last_year.receipts_cents,
+                    year - 1,
+                  )}
+                </small>
+              </dd>
+            </div>
+            <div>
+              <dt>CA encaissé depuis le 1er janvier</dt>
+              <dd>{formatEuros(ytd.receipts_cents)}</dd>
+              <dd>
+                <small>
+                  {evolution(
+                    ytd.receipts_cents,
+                    d.year_to_date_last_year.receipts_cents,
+                    year - 1,
+                  )}
+                </small>
+              </dd>
+            </div>
+            <div>
+              <dt>Résultat estimé depuis le 1er janvier</dt>
+              <dd>{formatEuros(ytd.result_cents)}</dd>
+            </div>
+            <div>
+              <dt>Provisions impôt + URSSAF</dt>
+              <dd>
+                {formatEuros(
+                  ytd.tax_provision_cents + ytd.urssaf_provision_cents,
+                )}
+              </dd>
+            </div>
+          </dl>
+          <button type="button" className="link" onClick={onOpenAccounting}>
+            Détail dans Comptabilité →
+          </button>
+        </section>
       </div>
+
       {message && <p role="status">{message}</p>}
       {error && <p role="alert">{error}</p>}
-      {showUnbilled &&
-        (d.unbilled_sessions.length === 0 ? (
-          <p>Aucune séance non facturée.</p>
-        ) : (
-          <>
-            {confirm && (
-              <div className="confirm">
-                <p>
-                  Facturer la séance du {formatDateTime(confirm.starts_at)} (
-                  {confirm.patient_name}) ? La facture va être émise avec le
-                  prochain numéro. Elle ne pourra plus être modifiée ni
-                  supprimée (seulement annulée par un avoir).
-                </p>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void validate(confirm)}
-                >
-                  Confirmer et émettre la facture
-                </button>
-                <button type="button" onClick={() => setConfirm(null)}>
-                  Annuler
-                </button>
-              </div>
-            )}
-            <table aria-label="Séances non facturées">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Patient</th>
-                  <th>Motif</th>
-                  <th>Tarif</th>
-                  <th />
+      {open === "unbilled" && (
+        <>
+          {confirm && (
+            <div className="confirm">
+              <p>
+                Facturer la séance du {formatDateTime(confirm.starts_at)} (
+                {confirm.patient_name}) ? La facture va être émise avec le
+                prochain numéro. Elle ne pourra plus être modifiée ni supprimée
+                (seulement annulée par un avoir).
+              </p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void validate(confirm)}
+              >
+                Confirmer et émettre la facture
+              </button>
+              <button type="button" onClick={() => setConfirm(null)}>
+                Annuler
+              </button>
+            </div>
+          )}
+          <table aria-label="Séances non facturées">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Patient</th>
+                <th>Motif</th>
+                <th>Tarif</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {d.unbilled_sessions.map((s) => (
+                <tr key={s.session_id}>
+                  <td>{formatDateTime(s.starts_at)}</td>
+                  <td>{s.patient_name}</td>
+                  <td>{s.reason}</td>
+                  <td>{formatEuros(s.fee_cents)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMessage(null);
+                        setError(null);
+                        setConfirm(s);
+                      }}
+                    >
+                      Valider
+                    </button>{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenPatient(s.patient_id, { sessionId: s.session_id })
+                      }
+                    >
+                      Ouvrir
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {d.unbilled_sessions.map((s) => (
-                  <tr key={s.session_id}>
-                    <td>{formatDateTime(s.starts_at)}</td>
-                    <td>{s.patient_name}</td>
-                    <td>{s.reason}</td>
-                    <td>{formatEuros(s.fee_cents)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMessage(null);
-                          setError(null);
-                          setConfirm(s);
-                        }}
-                      >
-                        Valider
-                      </button>{" "}
-                      <button
-                        type="button"
-                        onClick={() => onOpenPatient(s.patient_id)}
-                      >
-                        Fiche patient
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        ))}
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {open === "unsent" && (
+        <BatchSend
+          kind="invoice"
+          onSent={() => void refresh()}
+          onClose={() => setOpen(null)}
+        />
+      )}
+      {open === "reminders" && (
+        <>
+          <BatchSend
+            kind="reminder"
+            onSent={() => void refresh()}
+            onClose={() => setOpen(null)}
+          />
+          <button type="button" className="link" onClick={onOpenCollections}>
+            Détail des impayés dans Encaissements →
+          </button>
+        </>
+      )}
 
-      <h3>CA encaissé par lieu depuis le 1er janvier</h3>
-      {d.by_location.length === 0 ? (
-        <p>Aucun encaissement cette année.</p>
+      <h3>Dernières séances</h3>
+      {d.recent_sessions.length === 0 ? (
+        <p>Aucune séance pour l'instant.</p>
       ) : (
-        <table className="figures" aria-label="CA par lieu">
+        <table aria-label="Dernières séances">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Patient</th>
+              <th>Motif</th>
+              <th>Tarif</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
           <tbody>
-            {d.by_location.map((l) => (
-              <tr key={l.location_name}>
-                <th scope="row">{l.location_name}</th>
-                <td>{formatEuros(l.receipts_cents)}</td>
-                <td>{Math.round((l.receipts_cents * 100) / yearReceipts)} %</td>
+            {d.recent_sessions.map((s) => (
+              <tr key={s.session_id}>
+                <td>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() =>
+                      onOpenPatient(s.patient_id, { sessionId: s.session_id })
+                    }
+                  >
+                    {formatDateTime(s.starts_at)}
+                  </button>
+                </td>
+                <td>{s.patient_name}</td>
+                <td>{s.reason}</td>
+                <td>{formatEuros(s.fee_cents)}</td>
+                <td>
+                  <span className={`status status-${s.status}`}>
+                    {SESSION_STATUSES[s.status]}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

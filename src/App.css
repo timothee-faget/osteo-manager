@@ -635,6 +635,116 @@ td > button + button {
   border-left: 4px solid var(--accent);
 }
 
+.todo button.done {
+  border-left-color: var(--success);
+  color: var(--muted);
+  font-weight: 400;
+  box-shadow: none;
+}
+
+/* --- Home --- */
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.home-grid .todo {
+  flex-direction: column;
+}
+
+.home-grid .todo button {
+  flex: none;
+}
+
+.patient-search input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  font-size: 1.05rem;
+}
+
+.patient-search ul {
+  margin: 0.5rem 0 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.patient-search li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+}
+
+.patient-search li > span {
+  flex: 1;
+}
+
+.patient-search li.active {
+  background: var(--accent-soft);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.cards > div {
+  padding: 0.9rem 1.1rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.cards dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.cards dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.cards dd small {
+  font-weight: 400;
+}
+
+.status {
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.85em;
+  white-space: nowrap;
+  background: var(--cream-deep);
+  color: var(--ink-soft);
+}
+
+.status-unbilled,
+.status-partially_paid {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.status-invoiced {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.status-paid {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
 /* --- Attachments and previews --- */
 
 .attachment-preview {
