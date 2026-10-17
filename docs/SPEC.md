@@ -29,7 +29,7 @@
 - Identité de la praticienne : nom, numéro **RPPS** (ADELI facultatif), SIRET, adresse, téléphone, e-mail, logo.
 - **Lieux d'exercice** : nom, adresse (imprimée sur la facture) et **taux de rétrocession** (0 % par défaut). Elle a aujourd'hui son propre cabinet, mais a été collaboratrice avec rétrocession (0 % / 30 %) et pourrait le redevenir. Le domicile du patient et l'entreprise sont des types de lieu.
 - **Tarifs** : tarif standard (60 € aujourd'hui) et tarif « à domicile ». Le montant reste modifiable séance par séance.
-- **Taux de provision** réglables : impôt (45 % de CA − charges) et URSSAF (26 % du CA), valeurs reprises de l'Excel.
+- **Taux de provision** réglables : impôt (45 % de CA − charges) et URSSAF (26 % du CA encaissé, net des rétrocessions), valeurs reprises de l'Excel.
 - Mentions de facture : « TVA non applicable, art. 261-4-1° du CGI », « Acte non pris en charge par la Sécurité sociale », conditions de paiement.
 
 ### 3.2 Fiches patients
