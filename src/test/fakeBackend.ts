@@ -23,7 +23,13 @@ import type { Annuity, AssetYear } from "../fixedAssets/api";
 import type { Cheque, Deposit } from "../collections/api";
 import type { Journal, Summary } from "../accounting/api";
 import type { Dashboard, Period } from "../dashboard/api";
-import type { Draft, MailSettings, Template } from "../mail/api";
+import type {
+  Draft,
+  Kind,
+  MailSettings,
+  Reminder,
+  Template,
+} from "../mail/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -94,11 +100,42 @@ export function fakeBackend(initial: LockStatus) {
     } as MailSettings,
     /** Stands in for the keychain. */
     smtpPassword: null as string | null,
-    invoiceTemplate: {
-      subject: "Facture {numero}",
-      body: "Bonjour,\n\nVeuillez trouver ci-joint la facture {numero}.",
-    } as Template,
-    sentMails: [] as (Draft & { invoiceId: number | null })[],
+    templates: {
+      invoice: {
+        subject: "Facture {numero}",
+        body: "Bonjour,\n\nVeuillez trouver ci-joint la facture {numero}.",
+      },
+      reminder: {
+        subject: "Relance : facture {numero}",
+        body: "Bonjour,\n\nLa facture {numero} reste à régler.",
+      },
+    } as Record<Kind, Template>,
+    sentMails: [] as (Draft & { invoiceId: number | null; kind?: Kind })[],
+    /** Newest first, by invoice id. */
+    reminders: {} as Record<number, Reminder[]>,
+  };
+  const sendable = (id: number, kind: Kind) => {
+    const i = withPayments(state.invoices.find((x) => x.id === id)!);
+    if (i.credit_note) throw { code: "invalid_invoice_cancelled" };
+    if (kind === "reminder" && i.payment_status === "paid")
+      throw { code: "invalid_invoice_paid" };
+    return i;
+  };
+  const draftOf = (i: InvoiceView, kind: Kind): Draft => {
+    const fill = (t: string) => t.split("{numero}").join(i.number);
+    return {
+      to: state.patients.find((p) => p.id === i.patient_id)?.email ?? "",
+      subject: fill(state.templates[kind].subject),
+      body: fill(state.templates[kind].body),
+    };
+  };
+  const record = (i: InvoiceView, kind: Kind, to: string) => {
+    if (kind === "invoice") i.sent_at = "2026-10-16T18:00:00";
+    else
+      state.reminders[i.id] = [
+        { sent_at: "2026-10-17T09:30:00", recipient: to.trim() },
+        ...(state.reminders[i.id] ?? []),
+      ];
   };
   const mailReady = () => {
     if (!state.mail.host || !state.mail.from_email)
@@ -466,35 +503,37 @@ export function fakeBackend(initial: LockStatus) {
         });
         return;
       case "get_mail_template":
-        return state.invoiceTemplate;
+        return state.templates[a.kind as Kind];
       case "update_mail_template":
         if (!a.template.subject.trim()) throw { code: "invalid_subject" };
-        state.invoiceTemplate = a.template;
-        return state.invoiceTemplate;
-      case "get_invoice_email": {
-        const i = state.invoices.find((x) => x.id === a.id)!;
-        if (i.credit_note) throw { code: "invalid_invoice_cancelled" };
-        const fill = (t: string) => t.split("{numero}").join(i.number);
-        return {
-          to: state.patients.find((p) => p.id === i.patient_id)?.email ?? "",
-          subject: fill(state.invoiceTemplate.subject),
-          body: fill(state.invoiceTemplate.body),
-        };
+        state.templates[a.kind as Kind] = a.template;
+        return a.template;
+      case "get_email_draft":
+        return draftOf(sendable(a.id, a.kind), a.kind);
+      case "send_email": {
+        mailReady();
+        const i = sendable(a.id, a.kind);
+        state.sentMails.push({ ...a.draft, invoiceId: i.id, kind: a.kind });
+        record(i, a.kind, a.draft.to);
+        return;
       }
-      case "list_unsent_invoice_emails":
+      case "list_invoice_reminders":
+        return state.reminders[a.id] ?? [];
+      case "list_pending_emails":
         return [...state.invoices]
-          .filter((i) => !i.sent_at && !i.credit_note)
+          .map(withPayments)
+          .filter((i) =>
+            a.kind === "invoice"
+              ? !i.sent_at && !i.credit_note
+              : !i.credit_note && i.paid_cents < i.amount_cents,
+          )
           .reverse()
           .map((i) => ({
             invoice: i,
-            draft: {
-              to:
-                state.patients.find((p) => p.id === i.patient_id)?.email ?? "",
-              subject: `Facture ${i.number}`,
-              body: "Bonjour",
-            },
+            draft: draftOf(i, a.kind),
+            last_reminder_at: state.reminders[i.id]?.[0]?.sent_at ?? null,
           }));
-      case "send_invoice_emails": {
+      case "send_emails": {
         // Like the backend, failures are reported per invoice, never thrown.
         let stop: { code: string } | null = null;
         try {
@@ -516,17 +555,14 @@ export function fakeBackend(initial: LockStatus) {
               number: i.number,
               error: { code, message: "" },
             };
-          state.sentMails.push({ ...item.draft, invoiceId: i.id });
-          i.sent_at = "2026-10-16T18:00:00";
+          state.sentMails.push({
+            ...item.draft,
+            invoiceId: i.id,
+            kind: a.kind,
+          });
+          record(i, a.kind, item.draft.to);
           return { invoice_id: i.id, number: i.number, error: null };
         });
-      }
-      case "send_invoice_email": {
-        mailReady();
-        const i = state.invoices.find((x) => x.id === a.id)!;
-        state.sentMails.push({ ...a.draft, invoiceId: i.id });
-        i.sent_at = "2026-10-16T18:00:00";
-        return i;
       }
       case "cancel_invoice": {
         const i = state.invoices.find((x) => x.id === a.id)!;
@@ -702,6 +738,8 @@ export function fakeBackend(initial: LockStatus) {
             amount_cents: i.amount_cents,
             remaining_cents: i.amount_cents - i.paid_cents,
             age_days: 3,
+            reminder_count: state.reminders[i.id]?.length ?? 0,
+            last_reminder_at: state.reminders[i.id]?.[0]?.sent_at ?? null,
           }));
         const total_cents = invoices.reduce((t, i) => t + i.remaining_cents, 0);
         return { invoices, total_cents };

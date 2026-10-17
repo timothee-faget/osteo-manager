@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use chrono::{Local, NaiveDate};
 use lettre::message::header::ContentType;
 use lettre::message::{Attachment, Mailbox, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
@@ -11,7 +12,7 @@ use lettre::{Address, Message, SmtpTransport, Transport};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
-use crate::invoices::{self, Invoice, InvoiceView};
+use crate::invoices::{self, InvoiceView};
 use crate::pdf;
 use crate::session::{SessionError, State};
 use crate::settings::is_plausible_email;
@@ -58,6 +59,32 @@ pub struct MailSettings {
     /// Whether a password was saved in the keychain (it is never sent to the front).
     #[serde(default)]
     pub password_saved: bool,
+}
+
+/// What an e-mail is about; each kind has its template.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Kind {
+    Invoice,
+    /// For an invoice still due.
+    Reminder,
+}
+
+impl Kind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Invoice => "invoice",
+            Self::Reminder => "reminder",
+        }
+    }
+}
+
+/// A reminder sent for an invoice.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Reminder {
+    /// Local time, `YYYY-MM-DDTHH:MM:SS`.
+    pub sent_at: String,
+    pub recipient: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -135,10 +162,10 @@ pub fn set_password_saved(conn: &Connection, saved: bool) -> Result<()> {
 
 // --- Templates ---
 
-pub fn template(conn: &Connection, kind: &str) -> Result<Template> {
+pub fn template(conn: &Connection, kind: Kind) -> Result<Template> {
     Ok(conn.query_row(
         "SELECT subject, body FROM mail_template WHERE kind = ?1",
-        [kind],
+        [kind.as_str()],
         |r| {
             Ok(Template {
                 subject: r.get(0)?,
@@ -148,29 +175,31 @@ pub fn template(conn: &Connection, kind: &str) -> Result<Template> {
     )?)
 }
 
-pub fn save_template(conn: &Connection, kind: &str, t: &Template) -> Result<Template> {
+pub fn save_template(conn: &Connection, kind: Kind, t: &Template) -> Result<Template> {
     let subject = t.subject.trim();
     if subject.is_empty() {
         return Err(SessionError::Invalid("subject"));
     }
-    let n = conn.execute(
+    conn.execute(
         "UPDATE mail_template SET subject = ?1, body = ?2 WHERE kind = ?3",
-        params![subject, t.body.trim(), kind],
+        params![subject, t.body.trim(), kind.as_str()],
     )?;
-    if n == 0 {
-        return Err(SessionError::Invalid("template"));
-    }
     template(conn, kind)
 }
 
-/// Fills `{patient}`, `{numero}`, `{date}` (of the session), `{montant}` and
-/// `{praticienne}`; unknown placeholders are left as they are.
-pub fn render(text: &str, invoice: &Invoice) -> String {
+/// Fills `{patient}`, `{numero}`, `{date}` (of the session), `{montant}`, `{reste}` (still
+/// due) and `{praticienne}`; unknown placeholders are left as they are.
+pub fn render(text: &str, view: &InvoiceView) -> String {
+    let invoice = &view.invoice;
     [
         ("{patient}", invoice.patient_name.clone()),
         ("{numero}", invoice.number.clone()),
         ("{date}", pdf::french_date(&invoice.service_date)),
         ("{montant}", pdf::euros(invoice.amount_cents)),
+        (
+            "{reste}",
+            pdf::euros(invoice.amount_cents - view.paid_cents),
+        ),
         ("{praticienne}", invoice.practitioner_name.clone()),
     ]
     .iter()
@@ -199,38 +228,77 @@ fn recipient(conn: &Connection, patient_id: i64) -> Result<String> {
         })?)
 }
 
-fn sendable(conn: &Connection, invoice_id: i64) -> Result<InvoiceView> {
+fn sendable(conn: &Connection, invoice_id: i64, kind: Kind) -> Result<InvoiceView> {
     let view = invoices::get_view(conn, invoice_id)?;
     if view.credit_note.is_some() {
         return Err(SessionError::Invalid("invoice_cancelled"));
     }
+    if kind == Kind::Reminder && view.paid_cents >= view.invoice.amount_cents {
+        return Err(SessionError::Invalid("invoice_paid"));
+    }
     Ok(view)
 }
 
-/// The invoice e-mail from the template, addressed to the patient.
-pub fn invoice_draft(conn: &Connection, invoice_id: i64) -> Result<Draft> {
-    let invoice = sendable(conn, invoice_id)?.invoice;
-    let t = template(conn, "invoice")?;
+/// The e-mail from the template of `kind`, addressed to the patient.
+pub fn draft(conn: &Connection, invoice_id: i64, kind: Kind) -> Result<Draft> {
+    let view = sendable(conn, invoice_id, kind)?;
+    let t = template(conn, kind)?;
     Ok(Draft {
-        to: recipient(conn, invoice.patient_id)?,
-        subject: render(&t.subject, &invoice),
-        body: render(&t.body, &invoice),
+        to: recipient(conn, view.invoice.patient_id)?,
+        subject: render(&t.subject, &view),
+        body: render(&t.body, &view),
     })
 }
 
-/// What sending an invoice needs, gathered while the database is locked.
+/// What sending an e-mail needs, gathered while the database is locked.
 pub struct Outgoing {
     pub settings: MailSettings,
     pub message: Message,
 }
 
-pub fn invoice_message(conn: &Connection, invoice_id: i64, draft: &Draft) -> Result<Outgoing> {
-    let invoice = sendable(conn, invoice_id)?.invoice;
+/// The reviewed e-mail with the invoice PDF attached (to reminders too).
+pub fn message(conn: &Connection, invoice_id: i64, kind: Kind, draft: &Draft) -> Result<Outgoing> {
+    let invoice = sendable(conn, invoice_id, kind)?.invoice;
     let settings = settings(conn)?;
     let pdf = invoices::invoice_pdf(conn, invoice_id)?;
     let attachment = (format!("Facture {}.pdf", invoice.number), pdf);
     let message = build(&settings, draft, Some(attachment))?;
     Ok(Outgoing { settings, message })
+}
+
+/// After sending: an invoice is marked sent, a reminder joins the invoice's history.
+pub fn record(conn: &Connection, invoice_id: i64, kind: Kind, to: &str) -> Result<()> {
+    match kind {
+        Kind::Invoice => {
+            invoices::set_sent(conn, invoice_id, true)?;
+        }
+        Kind::Reminder => {
+            conn.execute(
+                "INSERT INTO invoice_reminder (invoice_id, sent_at, recipient) VALUES (?1, ?2, ?3)",
+                params![
+                    invoice_id,
+                    Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+                    to.trim()
+                ],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Newest first.
+pub fn reminders(conn: &Connection, invoice_id: i64) -> Result<Vec<Reminder>> {
+    let mut stmt = conn.prepare(
+        "SELECT sent_at, recipient FROM invoice_reminder WHERE invoice_id = ?1
+         ORDER BY sent_at DESC, id DESC",
+    )?;
+    let rows = stmt.query_map([invoice_id], |r| {
+        Ok(Reminder {
+            sent_at: r.get(0)?,
+            recipient: r.get(1)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 fn mailbox(email: &str, name: &str, invalid: &'static str) -> Result<Mailbox> {
@@ -279,20 +347,34 @@ fn build(
 
 // --- Batch sending ---
 
-/// An unsent invoice with its e-mail, for review before a batch send.
+/// An invoice with its e-mail, for review before a batch send.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Unsent {
+pub struct Pending {
     pub invoice: InvoiceView,
     pub draft: Draft,
+    /// Local time of the last reminder, if any.
+    pub last_reminder_at: Option<String>,
 }
 
-/// Every invoice neither sent nor cancelled, oldest first.
-pub fn unsent(conn: &Connection) -> Result<Vec<Unsent>> {
-    invoices::list_unsent(conn)?
+/// Oldest first: invoices neither sent nor cancelled, or for reminders those still due.
+pub fn pending(conn: &Connection, kind: Kind, today: NaiveDate) -> Result<Vec<Pending>> {
+    let views = match kind {
+        Kind::Invoice => invoices::list_unsent(conn)?,
+        Kind::Reminder => invoices::unpaid(conn, today)?
+            .invoices
+            .iter()
+            .map(|u| invoices::get_view(conn, u.invoice_id))
+            .collect::<Result<_>>()?,
+    };
+    views
         .into_iter()
         .map(|invoice| {
-            let draft = invoice_draft(conn, invoice.invoice.id)?;
-            Ok(Unsent { invoice, draft })
+            let id = invoice.invoice.id;
+            Ok(Pending {
+                draft: draft(conn, id, kind)?,
+                last_reminder_at: reminders(conn, id)?.into_iter().next().map(|r| r.sent_at),
+                invoice,
+            })
         })
         .collect()
 }
@@ -307,6 +389,7 @@ pub struct BatchItem {
 pub struct Prepared {
     invoice_id: i64,
     number: String,
+    to: String,
     outgoing: Result<Outgoing>,
 }
 
@@ -315,18 +398,21 @@ pub struct Prepared {
 pub struct BatchResult {
     pub invoice_id: i64,
     pub number: String,
+    #[serde(skip)]
+    pub to: String,
     pub error: Option<SessionError>,
 }
 
 /// Builds every message while the database is locked; a bad one only fails itself.
-pub fn prepare_batch(conn: &Connection, items: &[BatchItem]) -> Result<Vec<Prepared>> {
+pub fn prepare_batch(conn: &Connection, kind: Kind, items: &[BatchItem]) -> Result<Vec<Prepared>> {
     items
         .iter()
         .map(|item| {
             Ok(Prepared {
                 invoice_id: item.invoice_id,
                 number: invoices::get(conn, item.invoice_id)?.number,
-                outgoing: invoice_message(conn, item.invoice_id, &item.draft),
+                to: item.draft.to.clone(),
+                outgoing: message(conn, item.invoice_id, kind, &item.draft),
             })
         })
         .collect()
@@ -365,6 +451,7 @@ pub fn send_batch(
             BatchResult {
                 invoice_id: p.invoice_id,
                 number: p.number,
+                to: p.to,
                 error,
             }
         })
@@ -479,43 +566,53 @@ pub async fn test_mail_settings(state: State<'_>) -> Result<()> {
 }
 
 #[tauri::command]
-pub fn get_mail_template(state: State, kind: String) -> Result<Template> {
-    template(state.lock().unwrap().conn()?, &kind)
+pub fn get_mail_template(state: State, kind: Kind) -> Result<Template> {
+    template(state.lock().unwrap().conn()?, kind)
 }
 
 #[tauri::command]
-pub fn update_mail_template(state: State, kind: String, template: Template) -> Result<Template> {
-    save_template(state.lock().unwrap().conn()?, &kind, &template)
+pub fn update_mail_template(state: State, kind: Kind, template: Template) -> Result<Template> {
+    save_template(state.lock().unwrap().conn()?, kind, &template)
 }
 
 #[tauri::command]
-pub fn get_invoice_email(state: State, id: i64) -> Result<Draft> {
-    invoice_draft(state.lock().unwrap().conn()?, id)
+pub fn get_email_draft(state: State, id: i64, kind: Kind) -> Result<Draft> {
+    draft(state.lock().unwrap().conn()?, id, kind)
 }
 
-/// Sends the invoice as reviewed, then marks it sent.
+/// Sends the e-mail as reviewed, then records it (invoice sent, or reminder history).
 #[tauri::command]
-pub async fn send_invoice_email(state: State<'_>, id: i64, draft: Draft) -> Result<InvoiceView> {
-    let outgoing = invoice_message(state.lock().unwrap().conn()?, id, &draft)?;
+pub async fn send_email(state: State<'_>, id: i64, kind: Kind, draft: Draft) -> Result<()> {
+    let outgoing = message(state.lock().unwrap().conn()?, id, kind, &draft)?;
     tauri::async_runtime::spawn_blocking(move || send(&outgoing))
         .await
         .map_err(|_| SessionError::Mail("connection"))??;
-    invoices::set_sent(state.lock().unwrap().conn()?, id, true)
+    record(state.lock().unwrap().conn()?, id, kind, &draft.to)
 }
 
 #[tauri::command]
-pub fn list_unsent_invoice_emails(state: State) -> Result<Vec<Unsent>> {
-    unsent(state.lock().unwrap().conn()?)
+pub fn list_pending_emails(state: State, kind: Kind) -> Result<Vec<Pending>> {
+    pending(
+        state.lock().unwrap().conn()?,
+        kind,
+        Local::now().date_naive(),
+    )
 }
 
-/// Sends the reviewed invoices over one login (the keychain is read once) and marks the
+#[tauri::command]
+pub fn list_invoice_reminders(state: State, id: i64) -> Result<Vec<Reminder>> {
+    reminders(state.lock().unwrap().conn()?, id)
+}
+
+/// Sends the reviewed e-mails over one login (the keychain is read once) and records the
 /// ones sent.
 #[tauri::command]
-pub async fn send_invoice_emails(
+pub async fn send_emails(
     state: State<'_>,
+    kind: Kind,
     items: Vec<BatchItem>,
 ) -> Result<Vec<BatchResult>> {
-    let prepared = prepare_batch(state.lock().unwrap().conn()?, &items)?;
+    let prepared = prepare_batch(state.lock().unwrap().conn()?, kind, &items)?;
     let results = tauri::async_runtime::spawn_blocking(move || {
         let mut smtp: Option<SmtpTransport> = None;
         send_batch(prepared, |o| {
@@ -530,7 +627,7 @@ pub async fn send_invoice_emails(
     let session = state.lock().unwrap();
     let conn = session.conn()?;
     for r in results.iter().filter(|r| r.error.is_none()) {
-        invoices::set_sent(conn, r.invoice_id, true)?;
+        record(conn, r.invoice_id, kind, &r.to)?;
     }
     Ok(results)
 }
@@ -608,10 +705,14 @@ mod tests {
     fn placeholders_come_from_the_invoice() {
         let mut f = fixture();
         let invoice = f.invoice("2026-10-16");
-        let text = "{patient} : facture {numero} du {date}, {montant}. {praticienne} {autre}";
+        pay(&mut f, invoice.id, 2000);
+        let view = invoices::get_view(&f.conn, invoice.id).unwrap();
+        let text =
+            "{patient} : facture {numero} du {date}, {reste} sur {montant}. {praticienne} {autre}";
         assert_eq!(
-            render(text, &invoice),
-            "Anne Dupont : facture 2026-10-001 du 16/10/2026, 60,00\u{a0}€. Claire Martin {autre}"
+            render(text, &view),
+            "Anne Dupont : facture 2026-10-001 du 16/10/2026, 40,00\u{a0}€ sur 60,00\u{a0}€. \
+             Claire Martin {autre}"
         );
     }
 
@@ -619,7 +720,7 @@ mod tests {
     fn draft_uses_the_template_and_the_patient_email() {
         let mut f = fixture();
         let invoice = f.invoice("2026-10-16");
-        let d = invoice_draft(&f.conn, invoice.id).unwrap();
+        let d = draft(&f.conn, invoice.id, Kind::Invoice).unwrap();
         assert_eq!(d.to, "");
         assert_eq!(d.subject, "Facture 2026-10-001");
         assert!(
@@ -631,7 +732,7 @@ mod tests {
         // A minor without an address of their own: the first guardian with one.
         set_patient_email(&mut f, "", vec![guardian(""), guardian("paul@example.org")]);
         assert_eq!(
-            invoice_draft(&f.conn, invoice.id).unwrap().to,
+            draft(&f.conn, invoice.id, Kind::Invoice).unwrap().to,
             "paul@example.org"
         );
         set_patient_email(
@@ -640,20 +741,20 @@ mod tests {
             vec![guardian("paul@example.org")],
         );
         assert_eq!(
-            invoice_draft(&f.conn, invoice.id).unwrap().to,
+            draft(&f.conn, invoice.id, Kind::Invoice).unwrap().to,
             "anne@example.org"
         );
 
         save_template(
             &f.conn,
-            "invoice",
+            Kind::Invoice,
             &Template {
                 subject: " Votre facture {numero} ".into(),
                 body: "Bonjour {patient}".into(),
             },
         )
         .unwrap();
-        let d = invoice_draft(&f.conn, invoice.id).unwrap();
+        let d = draft(&f.conn, invoice.id, Kind::Invoice).unwrap();
         assert_eq!(
             (d.subject.as_str(), d.body.as_str()),
             ("Votre facture 2026-10-001", "Bonjour Anne Dupont")
@@ -663,7 +764,7 @@ mod tests {
             body: "".into(),
         };
         assert_eq!(
-            invalid_field(save_template(&f.conn, "invoice", &blank)),
+            invalid_field(save_template(&f.conn, Kind::Invoice, &blank)),
             "subject"
         );
     }
@@ -674,7 +775,7 @@ mod tests {
         let invoice = f.invoice("2026-10-16");
         invoices::cancel(&mut f.conn, invoice.id, "", day("2026-10-17")).unwrap();
         assert_eq!(
-            invalid_field(invoice_draft(&f.conn, invoice.id)),
+            invalid_field(draft(&f.conn, invoice.id, Kind::Invoice)),
             "invoice_cancelled"
         );
     }
@@ -693,13 +794,13 @@ mod tests {
             _ => panic!("expected a mail error"),
         };
         assert_eq!(
-            mail_code(invoice_message(&f.conn, invoice.id, &draft)),
+            mail_code(message(&f.conn, invoice.id, Kind::Invoice, &draft)),
             "not_configured"
         );
 
         configured(&f);
         let text = String::from_utf8(
-            invoice_message(&f.conn, invoice.id, &draft)
+            message(&f.conn, invoice.id, Kind::Invoice, &draft)
                 .unwrap()
                 .message
                 .formatted(),
@@ -716,7 +817,7 @@ mod tests {
             ..draft
         };
         assert_eq!(
-            invalid_field(invoice_message(&f.conn, invoice.id, &bad_to).map(|_| ())),
+            invalid_field(message(&f.conn, invoice.id, Kind::Invoice, &bad_to).map(|_| ())),
             "to"
         );
     }
@@ -730,10 +831,74 @@ mod tests {
         let last = f.invoice("2026-10-16");
         invoices::set_sent(&f.conn, sent.id, true).unwrap();
         invoices::cancel(&mut f.conn, cancelled.id, "", day("2026-10-17")).unwrap();
-        let list = unsent(&f.conn).unwrap();
+        let list = pending(&f.conn, Kind::Invoice, day("2026-10-17")).unwrap();
         let ids: Vec<_> = list.iter().map(|u| u.invoice.invoice.id).collect();
         assert_eq!(ids, [first.id, last.id]);
         assert_eq!(list[1].draft.subject, format!("Facture {}", last.number));
+    }
+
+    fn pay(f: &mut Fixture, invoice_id: i64, amount_cents: i64) {
+        use crate::payments::{self, PaymentInput, PaymentMethod};
+        let p = PaymentInput {
+            invoice_id,
+            amount_cents,
+            method: PaymentMethod::Cash,
+            received_on: "2026-10-16".into(),
+            reference: "".into(),
+        };
+        payments::add(&mut f.conn, &p, day("2026-10-17")).unwrap();
+    }
+
+    #[test]
+    fn reminders_are_for_invoices_still_due_and_kept_in_history() {
+        let mut f = fixture();
+        let due = f.invoice("2026-09-01");
+        let paid = f.invoice("2026-09-02");
+        pay(&mut f, due.id, 1000);
+        pay(&mut f, paid.id, 6000);
+        assert_eq!(
+            invalid_field(draft(&f.conn, paid.id, Kind::Reminder)),
+            "invoice_paid"
+        );
+        let d = draft(&f.conn, due.id, Kind::Reminder).unwrap();
+        assert_eq!(d.subject, "Relance : facture 2026-09-001");
+        assert!(
+            d.body
+                .contains("reste à régler : 50,00\u{a0}€ sur 60,00\u{a0}€.")
+        );
+
+        configured(&f);
+        let m = message(
+            &f.conn,
+            due.id,
+            Kind::Reminder,
+            &Draft {
+                to: "anne@example.org".into(),
+                ..d
+            },
+        );
+        let text = String::from_utf8(m.unwrap().message.formatted()).unwrap();
+        assert!(text.contains("filename=\"Facture 2026-09-001.pdf\""));
+
+        let list = pending(&f.conn, Kind::Reminder, day("2026-10-17")).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].last_reminder_at, None);
+
+        record(&f.conn, due.id, Kind::Reminder, " anne@example.org ").unwrap();
+        record(&f.conn, due.id, Kind::Reminder, "paul@example.org").unwrap();
+        let history = reminders(&f.conn, due.id).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].recipient, "paul@example.org");
+        assert_eq!(history[1].recipient, "anne@example.org");
+        let list = pending(&f.conn, Kind::Reminder, day("2026-10-17")).unwrap();
+        assert_eq!(list[0].last_reminder_at.as_ref(), Some(&history[0].sent_at));
+        // A reminder does not change the invoice's own sending status.
+        assert_eq!(invoices::get_view(&f.conn, due.id).unwrap().sent_at, None);
+
+        let unpaid = invoices::unpaid(&f.conn, day("2026-10-17")).unwrap();
+        let u = &unpaid.invoices[0];
+        assert_eq!(u.reminder_count, 2);
+        assert_eq!(u.last_reminder_at.as_ref(), Some(&history[0].sent_at));
     }
 
     fn item(invoice_id: i64, to: &str) -> BatchItem {
@@ -768,14 +933,17 @@ mod tests {
             item(ids[3], "anne@example.org"),
         ];
         let mut delivered = vec![];
-        let results = send_batch(prepare_batch(&f.conn, &items).unwrap(), |o| {
-            let to = o.message.envelope().to()[0].to_string();
-            if to == "refuse@example.org" {
-                return Err(SessionError::Mail("rejected"));
-            }
-            delivered.push(to);
-            Ok(())
-        });
+        let results = send_batch(
+            prepare_batch(&f.conn, Kind::Invoice, &items).unwrap(),
+            |o| {
+                let to = o.message.envelope().to()[0].to_string();
+                if to == "refuse@example.org" {
+                    return Err(SessionError::Mail("rejected"));
+                }
+                delivered.push(to);
+                Ok(())
+            },
+        );
         assert_eq!(
             outcome(&results),
             [
@@ -796,10 +964,13 @@ mod tests {
         let b = f.invoice("2026-10-15").id;
         let items = [item(a, "anne@example.org"), item(b, "anne@example.org")];
         let mut attempts = 0;
-        let results = send_batch(prepare_batch(&f.conn, &items).unwrap(), |_| {
-            attempts += 1;
-            Err(SessionError::Mail("auth"))
-        });
+        let results = send_batch(
+            prepare_batch(&f.conn, Kind::Invoice, &items).unwrap(),
+            |_| {
+                attempts += 1;
+                Err(SessionError::Mail("auth"))
+            },
+        );
         assert_eq!(attempts, 1);
         assert_eq!(
             outcome(&results),

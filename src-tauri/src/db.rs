@@ -339,6 +339,24 @@ Veuillez trouver ci-joint la facture {numero} de votre consultation du {date}, d
 
 Bien cordialement,
 {praticienne}');",
+    // v13: reminders sent for unpaid invoices, and their template.
+    "CREATE TABLE invoice_reminder (
+        id INTEGER PRIMARY KEY,
+        invoice_id INTEGER NOT NULL REFERENCES invoice (id),
+        sent_at TEXT NOT NULL,
+        recipient TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX invoice_reminder_invoice ON invoice_reminder (invoice_id);
+    INSERT INTO mail_template (kind, subject, body) VALUES ('reminder',
+        'Relance : facture {numero}',
+        'Bonjour,
+
+Sauf erreur de ma part, la facture {numero} de votre consultation du {date} reste à régler : {reste} sur {montant}. Vous la trouverez ci-jointe.
+
+Si vous avez déjà effectué le règlement, merci de ne pas tenir compte de ce message.
+
+Bien cordialement,
+{praticienne}');",
 ];
 
 #[derive(Debug, thiserror::Error)]

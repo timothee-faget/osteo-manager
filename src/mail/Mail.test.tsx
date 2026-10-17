@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
 import App from "../App";
 import type { InvoiceView } from "../invoices/api";
+import type { Patient } from "../patients/api";
 import { fakeBackend, openSettings } from "../test/fakeBackend";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -118,11 +119,14 @@ test("port invalide refusé sans appel", async () => {
   expect(calls("update_mail_settings")).toHaveLength(0);
 });
 
-test("modèle de mail des factures", async () => {
+test("modèles de mail des factures et des relances", async () => {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   render(<App />);
-  const s = await mailSection(user);
+  await mailSection(user);
+  const s = within(
+    screen.getByRole("form", { name: "Modèle d'envoi des factures" }),
+  );
   const subject = s.getByLabelText("Objet");
   expect(subject).toHaveValue("Facture {numero}");
   await user.clear(subject);
@@ -133,7 +137,16 @@ test("modèle de mail des factures", async () => {
   await user.type(subject, "Votre facture {{numero}");
   await user.click(s.getByRole("button", { name: "Enregistrer le modèle" }));
   expect(await s.findByText("Modèle enregistré.")).toBeInTheDocument();
-  expect(state.invoiceTemplate.subject).toBe("Votre facture {numero}");
+  expect(state.templates.invoice.subject).toBe("Votre facture {numero}");
+
+  const r = within(
+    screen.getByRole("form", { name: "Modèle de relance des impayés" }),
+  );
+  expect(r.getByLabelText("Objet")).toHaveValue("Relance : facture {numero}");
+  await user.type(r.getByLabelText("Message"), " Merci.");
+  await user.click(r.getByRole("button", { name: "Enregistrer le modèle" }));
+  expect(await r.findByText("Modèle enregistré.")).toBeInTheDocument();
+  expect(state.templates.reminder.body).toMatch(/reste à régler\. Merci\.$/);
 });
 
 async function openInvoice(
@@ -179,6 +192,7 @@ test("envoi d'une facture par e-mail, relu avant envoi", async () => {
   ).toBeInTheDocument();
   expect(state.sentMails[0]).toEqual({
     invoiceId: 1,
+    kind: "invoice",
     to: "anne@example.org",
     subject: "Facture 2026-10-001",
     body: "Bonjour,\n\nVeuillez trouver ci-joint la facture 2026-10-001.\nÀ bientôt",
@@ -295,4 +309,111 @@ test("envoi groupé arrêté si l'identifiant est refusé", async () => {
     "2026-10-001 : Le serveur a refusé l'identifiant",
   );
   expect(state.invoices[0].sent_at).toBeNull();
+});
+
+test("relance unitaire depuis la facture, avec historique", async () => {
+  const { user, state, d } = await openInvoice((s) => {
+    s.mail = {
+      ...s.mail,
+      host: "smtp.example.org",
+      from_email: "c@example.org",
+    };
+    s.smtpPassword = "secret";
+  });
+  await user.click(d.getByRole("button", { name: "Relancer par e-mail…" }));
+  const form = within(
+    await d.findByRole("form", { name: "Relance de la facture" }),
+  );
+  expect(form.getByLabelText("Objet")).toHaveValue(
+    "Relance : facture 2026-10-001",
+  );
+  await user.type(form.getByLabelText("Destinataire"), "anne@example.org");
+  await user.click(form.getByRole("button", { name: "Envoyer" }));
+  expect(
+    await d.findByText("Relance envoyée à anne@example.org."),
+  ).toBeInTheDocument();
+  expect(state.sentMails[0]).toMatchObject({ kind: "reminder", invoiceId: 1 });
+  expect(
+    await d.findByText("Le 17/10/2026 à 09:30, à anne@example.org"),
+  ).toBeInTheDocument();
+  // A reminder is not the invoice's own sending.
+  expect(state.invoices[0].sent_at).toBeNull();
+});
+
+test("pas de relance pour une facture payée", async () => {
+  const { d } = await openInvoice((s) => {
+    s.payments = [
+      {
+        id: 1,
+        invoice_id: 1,
+        amount_cents: 6000,
+        method: "cash",
+        received_on: "2026-10-16",
+        reference: "",
+        created_at: "2026-10-16T10:00:00",
+        deposit_id: null,
+      },
+    ];
+  });
+  expect(d.getByRole("button", { name: "Envoyer par e-mail…" })).toBeVisible();
+  expect(d.queryByRole("button", { name: "Relancer par e-mail…" })).toBeNull();
+});
+
+test("relance groupée des impayés : présélection des anciennes factures", async () => {
+  const user = userEvent.setup();
+  const state = fakeBackend("unlocked");
+  state.mail = {
+    ...state.mail,
+    host: "smtp.example.org",
+    from_email: "c@example.org",
+  };
+  state.smtpPassword = "secret";
+  state.patients = [{ id: 1, email: "anne@example.org" } as Patient];
+  const today = new Date().toISOString().slice(0, 10);
+  const invoice = (id: number, issued_on: string): InvoiceView => ({
+    ...INVOICE,
+    id,
+    number: `2026-0${id}-001`,
+    issued_on,
+    sent_at: "2026-10-16T18:00:00",
+  });
+  state.invoices = [
+    invoice(3, today),
+    invoice(2, "2026-02-01"),
+    invoice(1, "2026-01-01"),
+  ];
+  // Reminded today: not preselected again.
+  state.reminders[2] = [
+    { sent_at: `${today}T08:00:00`, recipient: "anne@example.org" },
+  ];
+  render(<App />);
+  await user.click(
+    await screen.findByRole("button", { name: "Encaissements" }),
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Relancer par e-mail…" }),
+  );
+  expect(
+    await screen.findByRole("heading", { name: "Relance des impayés" }),
+  ).toBeInTheDocument();
+  const box = (n: string) =>
+    screen.getByRole("checkbox", { name: `Envoyer la facture ${n}` });
+  expect(box("2026-01-001")).toBeChecked();
+  expect(box("2026-02-001")).not.toBeChecked();
+  expect(box("2026-03-001")).not.toBeChecked();
+
+  await user.click(screen.getByRole("button", { name: "Envoyer 1 relance" }));
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "1 relance envoyée.",
+  );
+  expect(state.sentMails).toEqual([
+    expect.objectContaining({ invoiceId: 1, kind: "reminder" }),
+  ]);
+  // Still due, so still listed, with its reminder now counted.
+  const row = (
+    await screen.findAllByRole("button", { name: "2026-01-001" })
+  )[0].closest("tr")!;
+  expect(
+    await within(row).findByText("1, la dernière le 17/10/2026"),
+  ).toBeInTheDocument();
 });

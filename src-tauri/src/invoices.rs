@@ -188,6 +188,9 @@ pub struct UnpaidInvoice {
     pub remaining_cents: i64,
     /// Days since the invoice was issued.
     pub age_days: i64,
+    pub reminder_count: i64,
+    /// Local time of the last reminder, if any.
+    pub last_reminder_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -200,7 +203,9 @@ pub struct Unpaid {
 pub fn unpaid(conn: &Connection, today: NaiveDate) -> Result<Unpaid> {
     let mut stmt = conn.prepare(
         "SELECT i.id, i.number, i.issued_on, i.patient_id, i.patient_name, i.amount_cents,
-            i.amount_cents - COALESCE(SUM(p.amount_cents), 0) AS remaining
+            i.amount_cents - COALESCE(SUM(p.amount_cents), 0) AS remaining,
+            (SELECT COUNT(*) FROM invoice_reminder r WHERE r.invoice_id = i.id),
+            (SELECT MAX(sent_at) FROM invoice_reminder r WHERE r.invoice_id = i.id)
          FROM invoice i LEFT JOIN payment p ON p.invoice_id = i.id
          WHERE NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)
          GROUP BY i.id
@@ -221,6 +226,8 @@ pub fn unpaid(conn: &Connection, today: NaiveDate) -> Result<Unpaid> {
                 amount_cents: r.get(5)?,
                 remaining_cents: r.get(6)?,
                 age_days,
+                reminder_count: r.get(7)?,
+                last_reminder_at: r.get(8)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;

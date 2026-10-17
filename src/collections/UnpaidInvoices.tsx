@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatEuros } from "../money";
+import { BatchSend } from "../mail/BatchSend";
 import { formatDate } from "../patients/api";
 import { unpaidApi, type Unpaid } from "./api";
 
@@ -15,6 +16,7 @@ export function UnpaidInvoices({
   onOpenInvoice: (id: number) => void;
 }) {
   const [unpaid, setUnpaid] = useState<Unpaid | null>(null);
+  const [reminding, setReminding] = useState(false);
 
   useEffect(() => {
     void unpaidApi.list().then(setUnpaid);
@@ -33,6 +35,19 @@ export function UnpaidInvoices({
             {n} facture{n > 1 ? "s" : ""} à encaisser, total dû{" "}
             {formatEuros(unpaid.total_cents)}
           </p>
+          {reminding ? (
+            <BatchSend
+              kind="reminder"
+              onSent={() => void unpaidApi.list().then(setUnpaid)}
+              onClose={() => setReminding(false)}
+            />
+          ) : (
+            <div className="actions">
+              <button type="button" onClick={() => setReminding(true)}>
+                Relancer par e-mail…
+              </button>
+            </div>
+          )}
           <table>
             <thead>
               <tr>
@@ -42,6 +57,7 @@ export function UnpaidInvoices({
                 <th>Montant</th>
                 <th>Reste dû</th>
                 <th>Ancienneté</th>
+                <th>Relances</th>
               </tr>
             </thead>
             <tbody>
@@ -61,6 +77,11 @@ export function UnpaidInvoices({
                   <td>{formatEuros(i.amount_cents)}</td>
                   <td>{formatEuros(i.remaining_cents)}</td>
                   <td>{formatAge(i.age_days)}</td>
+                  <td>
+                    {i.last_reminder_at
+                      ? `${i.reminder_count}, la dernière le ${formatDate(i.last_reminder_at.slice(0, 10))}`
+                      : "Aucune"}
+                  </td>
                 </tr>
               ))}
             </tbody>

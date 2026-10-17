@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "../lock/api";
-import { mailApi, type Draft } from "./api";
+import { mailApi, type Draft, type Kind } from "./api";
 
-/** The invoice e-mail from the template, to review and edit before sending. */
+/** The invoice or reminder e-mail from its template, to review and edit before sending. */
 export function InvoiceEmail({
   invoiceId,
+  kind,
   busy,
   onSend,
   onCancel,
 }: {
   invoiceId: number;
+  kind: Kind;
   busy: boolean;
   onSend: (draft: Draft) => void;
   onCancel: () => void;
@@ -19,17 +21,19 @@ export function InvoiceEmail({
 
   useEffect(() => {
     mailApi
-      .invoiceDraft(invoiceId)
+      .draft(invoiceId, kind)
       .then(setDraft)
       .catch((e: unknown) => setError(errorMessage(e)));
-  }, [invoiceId]);
+  }, [invoiceId, kind]);
 
   if (error) return <p role="alert">{error}</p>;
   if (!draft) return null;
   return (
     <form
       className="confirm"
-      aria-label="E-mail de la facture"
+      aria-label={
+        kind === "reminder" ? "Relance de la facture" : "E-mail de la facture"
+      }
       onSubmit={(e) => {
         e.preventDefault();
         onSend(draft);

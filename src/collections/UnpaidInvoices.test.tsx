@@ -95,7 +95,8 @@ test("impayés par ancienneté, total, et ouverture de la facture", async () => 
   }).parentElement!;
   const numbers = within(section)
     .getAllByRole("button")
-    .map((b) => b.textContent);
+    .map((b) => b.textContent)
+    .filter((t) => t !== "Relancer par e-mail…");
   expect(numbers).toEqual(["2026-10-002", "2026-10-001"]);
   const row = within(section).getByText("Paul Durand").closest("tr")!;
   expect(within(row).getByText("40,00 €")).toBeInTheDocument();
