@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CollectionsPage } from "./collections/CollectionsPage";
 import { ExpensesPage } from "./expenses/ExpensesPage";
 import { FixedAssetsPage } from "./fixedAssets/FixedAssetsPage";
 import { QuickSearch } from "./search/QuickSearch";
@@ -9,12 +10,19 @@ import { PatientsPage } from "./patients/PatientsPage";
 import { SettingsPage } from "./settings/SettingsPage";
 
 type Page =
-  "home" | "patients" | "invoices" | "expenses" | "assets" | "settings";
+  | "home"
+  | "patients"
+  | "invoices"
+  | "collections"
+  | "expenses"
+  | "assets"
+  | "settings";
 
 const PAGES: Record<Page, string> = {
   home: "Accueil",
   patients: "Patients",
   invoices: "Factures",
+  collections: "Encaissements",
   expenses: "Dépenses",
   assets: "Immobilisations",
   settings: "Paramètres",
@@ -91,6 +99,7 @@ function Home({
         {page === "invoices" && (
           <InvoicesPage key={target?.seq} openInvoiceId={target?.id} />
         )}
+        {page === "collections" && <CollectionsPage />}
         {page === "expenses" && <ExpensesPage />}
         {page === "assets" && <FixedAssetsPage />}
         {page === "settings" && autoLock !== null && (

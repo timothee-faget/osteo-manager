@@ -1,4 +1,5 @@
-//! Invoice and credit note PDFs (A4), rendered with krilla from the immutable snapshots.
+//! Invoice, credit note and cheque deposit PDFs (A4), rendered with krilla. Invoices and
+//! credit notes are drawn from their immutable snapshots.
 //! The Inter font (SIL OFL, see `fonts/Inter-LICENSE.txt`) is embedded, subsetted.
 
 use krilla::Document;
@@ -373,6 +374,140 @@ pub fn credit_note(cn: &CreditNote, inv: &Invoice, logo: Option<&Logo>) -> Vec<u
     render(inv, content, logo)
 }
 
+/// A cheque deposit slip.
+pub struct DepositSlip<'a> {
+    pub number: i64,
+    pub deposited_on: &'a str,
+    /// Account holder: the practitioner's name, address and SIRET lines.
+    pub holder: Vec<String>,
+    pub cheques: Vec<SlipCheque>,
+}
+
+pub struct SlipCheque {
+    pub received_on: String,
+    /// Cheque number.
+    pub reference: String,
+    /// Who the payment is from (the invoiced patient).
+    pub drawer: String,
+    pub invoice_number: String,
+    pub amount_cents: i64,
+}
+
+/// Rows per page, so that long deposits continue on further pages.
+const SLIP_ROWS_FIRST: usize = 34;
+const SLIP_ROWS_NEXT: usize = 36;
+
+/// Which rows go on each page; there is always a first page.
+fn slip_pages(rows: usize) -> Vec<std::ops::Range<usize>> {
+    let mut pages = Vec::new();
+    let mut start = 0;
+    loop {
+        let size = if pages.is_empty() {
+            SLIP_ROWS_FIRST
+        } else {
+            SLIP_ROWS_NEXT
+        };
+        let end = rows.min(start + size);
+        pages.push(start..end);
+        if end == rows {
+            return pages;
+        }
+        start = end;
+    }
+}
+
+pub fn deposit_slip(slip: &DepositSlip) -> Vec<u8> {
+    let mut document = Document::new();
+    document.set_metadata(
+        Metadata::new()
+            .title(format!("Remise de chèques n° {}", slip.number))
+            .creator("Osteo Manager".into())
+            .language("fr".into()),
+    );
+    let total: i64 = slip.cheques.iter().map(|c| c.amount_cents).sum();
+    let pages: Vec<&[SlipCheque]> = slip_pages(slip.cheques.len())
+        .into_iter()
+        .map(|r| &slip.cheques[r])
+        .collect();
+    let count = pages.len();
+    for (i, rows) in pages.into_iter().enumerate() {
+        let mut page =
+            document.start_page_with(PageSettings::from_wh(PAGE_W, PAGE_H).expect("A4 size"));
+        let mut surface = page.surface();
+        let mut c = Canvas {
+            surface: &mut surface,
+            regular: Face::new(REGULAR),
+            bold: Face::new(SEMIBOLD),
+        };
+        let mut y = MARGIN + 18.0;
+        if i == 0 {
+            c.text(MARGIN, y, 18.0, true, "Remise de chèques");
+            c.text_right(RIGHT, y, 11.0, false, &format!("N° {}", slip.number));
+            y += 20.0;
+            c.text_right(
+                RIGHT,
+                y,
+                11.0,
+                false,
+                &format!("Date de dépôt : {}", french_date(slip.deposited_on)),
+            );
+            for (j, line) in slip.holder.iter().enumerate() {
+                c.muted(|c| c.text(MARGIN, y, 10.0, j == 0, line));
+                y += 13.0;
+            }
+            y += 20.0;
+        } else {
+            c.muted(|c| {
+                c.text(
+                    MARGIN,
+                    y,
+                    10.0,
+                    false,
+                    &format!("Remise de chèques n° {} (suite)", slip.number),
+                )
+            });
+            y += 28.0;
+        }
+
+        c.text(MARGIN, y, 10.0, true, "Reçu le");
+        c.text(MARGIN + 70.0, y, 10.0, true, "N° de chèque");
+        c.text(MARGIN + 170.0, y, 10.0, true, "Tireur");
+        c.text(MARGIN + 330.0, y, 10.0, true, "Facture");
+        c.text_right(RIGHT, y, 10.0, true, "Montant");
+        c.rule(y + 7.0);
+        y += 24.0;
+        for ch in rows {
+            c.text(MARGIN, y, 10.0, false, &french_date(&ch.received_on));
+            c.text(MARGIN + 70.0, y, 10.0, false, &ch.reference);
+            c.text(MARGIN + 170.0, y, 10.0, false, &ch.drawer);
+            c.text(MARGIN + 330.0, y, 10.0, false, &ch.invoice_number);
+            c.text_right(RIGHT, y, 10.0, false, &euros(ch.amount_cents));
+            y += 18.0;
+        }
+        if i + 1 == count {
+            c.rule(y - 8.0);
+            y += 10.0;
+            let n = slip.cheques.len();
+            let label = format!("{n} chèque{}", if n > 1 { "s" } else { "" });
+            c.text(MARGIN, y, 11.0, true, &label);
+            c.text_right(RIGHT - 90.0, y, 11.0, true, "Total");
+            c.text_right(RIGHT, y, 11.0, true, &euros(total));
+        }
+        c.muted(|c| {
+            c.text_right(
+                RIGHT,
+                PAGE_H - MARGIN / 2.0,
+                8.5,
+                false,
+                &format!("Page {}/{count}", i + 1),
+            )
+        });
+        surface.finish();
+        page.finish();
+    }
+    document.finish().expect("the document is valid")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,6 +591,45 @@ mod tests {
         }
     }
 
+    fn slip(cheques: usize) -> DepositSlip<'static> {
+        DepositSlip {
+            number: 3,
+            deposited_on: "2026-10-20",
+            holder: vec!["Claire Martin".into(), "SIRET : 12345678900015".into()],
+            cheques: (0..cheques)
+                .map(|i| SlipCheque {
+                    received_on: "2026-10-16".into(),
+                    reference: format!("{:07}", 1000 + i),
+                    drawer: "Anne Dupont".into(),
+                    invoice_number: format!("2026-10-{:03}", i + 1),
+                    amount_cents: 6000,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn deposit_slip_continues_on_further_pages() {
+        let single = |rows| match slip_pages(rows).as_slice() {
+            [page] => page.clone(),
+            pages => panic!("expected one page, got {pages:?}"),
+        };
+        assert_eq!(single(0), 0..0);
+        assert_eq!(single(SLIP_ROWS_FIRST), 0..SLIP_ROWS_FIRST);
+        let n = SLIP_ROWS_FIRST + SLIP_ROWS_NEXT + 1;
+        assert_eq!(
+            slip_pages(n),
+            [
+                0..SLIP_ROWS_FIRST,
+                SLIP_ROWS_FIRST..SLIP_ROWS_FIRST + SLIP_ROWS_NEXT,
+                n - 1..n
+            ]
+        );
+        for pdf in [deposit_slip(&slip(2)), deposit_slip(&slip(n))] {
+            assert!(pdf.starts_with(b"%PDF-"));
+        }
+    }
+
     #[test]
     fn unreadable_logo_is_skipped() {
         let broken = Logo {
@@ -485,5 +659,6 @@ mod tests {
             credit_note(&cn, &inv, None),
         )
         .unwrap();
+        std::fs::write(format!("{dir}/deposit.pdf"), deposit_slip(&slip(45))).unwrap();
     }
 }

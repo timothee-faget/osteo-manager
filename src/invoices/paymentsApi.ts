@@ -25,7 +25,12 @@ export type PaymentInput = {
   reference: string;
 };
 
-export type Payment = PaymentInput & { id: number; created_at: string };
+export type Payment = PaymentInput & {
+  id: number;
+  created_at: string;
+  /** Set once the cheque has been deposited at the bank. */
+  deposit_id: number | null;
+};
 
 export const paymentsApi = {
   list: (invoiceId: number) =>

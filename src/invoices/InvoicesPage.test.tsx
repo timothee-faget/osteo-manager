@@ -198,3 +198,26 @@ test("pas de saisie de paiement sur une facture annulée", async () => {
   const d = await openInvoice(user);
   expect(d.queryByLabelText("Montant encaissé")).not.toBeInTheDocument();
 });
+
+test("un chèque remis en banque ne se supprime plus", async () => {
+  const { user, state } = await setup();
+  state.payments = [
+    {
+      id: 1,
+      invoice_id: 1,
+      amount_cents: 6000,
+      method: "cheque",
+      received_on: "2026-10-16",
+      reference: "1234567",
+      created_at: "2026-10-16T10:00:00",
+      deposit_id: 2,
+    },
+  ];
+  const d = await openInvoice(user);
+  expect(
+    await d.findByText("Remis en banque (remise n° 2)"),
+  ).toBeInTheDocument();
+  expect(
+    d.queryByRole("button", { name: "Supprimer" }),
+  ).not.toBeInTheDocument();
+});
