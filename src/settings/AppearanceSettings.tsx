@@ -11,24 +11,21 @@ export function AppearanceSettings() {
   }
 
   return (
-    <section>
-      <h2>Apparence</h2>
-      <div className="field">
-        Thème
-        <div className="segmented" role="group" aria-label="Thème">
-          {(Object.keys(THEMES) as Theme[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={theme === t}
-              onClick={() => choose(t)}
-            >
-              {THEMES[t]}
-            </button>
-          ))}
-        </div>
-        <small>Auto suit le réglage clair ou sombre de macOS.</small>
+    <div className="field">
+      Thème
+      <div className="segmented" role="group" aria-label="Thème">
+        {(Object.keys(THEMES) as Theme[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            aria-pressed={theme === t}
+            onClick={() => choose(t)}
+          >
+            {THEMES[t]}
+          </button>
+        ))}
       </div>
-    </section>
+      <small>Auto suit le réglage clair ou sombre de macOS.</small>
+    </div>
   );
 }

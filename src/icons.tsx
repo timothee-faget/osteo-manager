@@ -64,6 +64,7 @@ const PATHS = {
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </>
   ),
+  chevron: <path d="m9 18 6-6-6-6" />,
   plus: (
     <>
       <path d="M5 12h14" />

@@ -23,24 +23,21 @@ export function AutoLockSettings({
   }
 
   return (
-    <section>
-      <h2>Verrouillage</h2>
-      <form onSubmit={(e) => void submit(e)}>
-        <label>
-          Verrouillage automatique après (minutes)
-          <input
-            type="number"
-            min={1}
-            max={120}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-        </label>
-        {feedback}
-        <button type="submit" disabled={busy}>
-          Enregistrer
-        </button>
-      </form>
-    </section>
+    <form onSubmit={(e) => void submit(e)}>
+      <label>
+        Verrouillage automatique après (minutes)
+        <input
+          type="number"
+          min={1}
+          max={120}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      </label>
+      {feedback}
+      <button type="submit" disabled={busy}>
+        Enregistrer
+      </button>
+    </form>
   );
 }

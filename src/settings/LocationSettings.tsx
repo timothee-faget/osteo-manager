@@ -87,8 +87,7 @@ export function LocationSettings() {
     setEditing({ ...editing, draft: { ...editing.draft, ...patch } });
 
   return (
-    <section>
-      <h2>Lieux d'exercice</h2>
+    <>
       {locations.length === 0 ? (
         <p>Aucun lieu pour l'instant.</p>
       ) : (
@@ -127,48 +126,54 @@ export function LocationSettings() {
       )}
       {editing ? (
         <form onSubmit={(e) => void submit(e)}>
-          <h3>{editing.id === null ? "Nouveau lieu" : "Modifier le lieu"}</h3>
-          <label>
-            Nom du lieu
-            <input
-              value={editing.draft.name}
-              onChange={(e) => set({ name: e.target.value })}
+          <fieldset>
+            <legend>
+              {editing.id === null ? "Nouveau lieu" : "Modifier le lieu"}
+            </legend>
+            <label>
+              Nom du lieu
+              <input
+                value={editing.draft.name}
+                onChange={(e) => set({ name: e.target.value })}
+              />
+            </label>
+            <label>
+              Type
+              <select
+                value={editing.draft.kind}
+                onChange={(e) => set({ kind: e.target.value as LocationKind })}
+              >
+                {Object.entries(LOCATION_KINDS).map(([kind, label]) => (
+                  <option key={kind} value={kind}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Adresse imprimée sur la facture
+              <textarea
+                rows={3}
+                value={editing.draft.address}
+                onChange={(e) => set({ address: e.target.value })}
+              />
+            </label>
+            <UnitField
+              label="Taux de rétrocession"
+              unit="%"
+              value={editing.draft.rate}
+              onChange={(rate) => set({ rate })}
             />
-          </label>
-          <label>
-            Type
-            <select
-              value={editing.draft.kind}
-              onChange={(e) => set({ kind: e.target.value as LocationKind })}
-            >
-              {Object.entries(LOCATION_KINDS).map(([kind, label]) => (
-                <option key={kind} value={kind}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Adresse imprimée sur la facture
-            <textarea
-              rows={3}
-              value={editing.draft.address}
-              onChange={(e) => set({ address: e.target.value })}
-            />
-          </label>
-          <UnitField
-            label="Taux de rétrocession"
-            unit="%"
-            value={editing.draft.rate}
-            onChange={(rate) => set({ rate })}
-          />
-          {feedback}
-          <button type="submit" disabled={busy}>
-            Enregistrer le lieu
-          </button>
-          <button type="button" onClick={() => setEditing(null)}>
-            Annuler
-          </button>
+            {feedback}
+            <div className="actions">
+              <button type="submit" disabled={busy}>
+                Enregistrer le lieu
+              </button>
+              <button type="button" onClick={() => setEditing(null)}>
+                Annuler
+              </button>
+            </div>
+          </fieldset>
         </form>
       ) : (
         <>
@@ -184,6 +189,6 @@ export function LocationSettings() {
           </button>
         </>
       )}
-    </section>
+    </>
   );
 }

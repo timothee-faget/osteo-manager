@@ -1,96 +1,117 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { bpToInput, centsToInput, parseEuros, parsePercent } from "../money";
-import { settingsApi } from "./api";
+import { settingsApi, type BillingSettings } from "./api";
 import { UnitField } from "./UnitField";
 import { useSave } from "./useSave";
 
-type Draft = {
-  standard_fee: string;
-  home_visit_fee: string;
-  tax_provision: string;
-  urssaf_provision: string;
-};
+type Key = keyof BillingSettings;
+type Field = { key: Key; label: string; hint?: string };
 
-export function BillingSettings() {
-  const [draft, setDraft] = useState<Draft | null>(null);
+/** Amounts are in cents (€), rates in basis points (%). */
+const isRate = (key: Key) => key.endsWith("_bp");
+
+/** Edits some of the billing settings; the others are kept as stored. */
+function BillingForm({
+  fields,
+  note,
+  success,
+}: {
+  fields: Field[];
+  note?: string;
+  success: string;
+}) {
+  const [draft, setDraft] = useState<Partial<Record<Key, string>> | null>(null);
   const { busy, save, setMessage, feedback } = useSave();
 
   useEffect(() => {
-    void settingsApi.billing().then((b) =>
-      setDraft({
-        standard_fee: centsToInput(b.standard_fee_cents),
-        home_visit_fee: centsToInput(b.home_visit_fee_cents),
-        tax_provision: bpToInput(b.tax_provision_bp),
-        urssaf_provision: bpToInput(b.urssaf_provision_bp),
-      }),
-    );
-  }, []);
+    void settingsApi
+      .billing()
+      .then((b) =>
+        setDraft(
+          Object.fromEntries(
+            fields.map(({ key }) => [
+              key,
+              isRate(key) ? bpToInput(b[key]) : centsToInput(b[key]),
+            ]),
+          ),
+        ),
+      );
+  }, [fields]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!draft) return;
-    const settings = {
-      standard_fee_cents: parseEuros(draft.standard_fee),
-      home_visit_fee_cents: parseEuros(draft.home_visit_fee),
-      tax_provision_bp: parsePercent(draft.tax_provision),
-      urssaf_provision_bp: parsePercent(draft.urssaf_provision),
-    };
-    if (Object.values(settings).some((v) => v === null)) {
+    const values = fields.map(({ key }) => {
+      const text = draft[key] ?? "";
+      return [key, isRate(key) ? parsePercent(text) : parseEuros(text)];
+    });
+    if (values.some(([, v]) => v === null)) {
       setMessage({
         text: "Saisissez des nombres, par exemple 60 ou 60,50.",
         error: true,
       });
       return;
     }
-    await save(
-      () =>
-        settingsApi.saveBilling(
-          settings as Record<keyof typeof settings, number>,
-        ),
-      "Tarifs et provisions enregistrés.",
-    );
+    await save(async () => {
+      // Re-read so the other form's latest save is not overwritten.
+      const current = await settingsApi.billing();
+      await settingsApi.saveBilling({
+        ...current,
+        ...Object.fromEntries(values),
+      });
+    }, success);
   }
 
   if (!draft) return null;
-  const field = (
-    key: keyof Draft,
-    label: string,
-    unit: string,
-    hint?: string,
-  ) => (
-    <UnitField
-      label={label}
-      unit={unit}
-      hint={hint}
-      value={draft[key]}
-      onChange={(value) => setDraft({ ...draft, [key]: value })}
+  return (
+    <form onSubmit={(e) => void submit(e)}>
+      {fields.map(({ key, label, hint }) => (
+        <UnitField
+          key={key}
+          label={label}
+          unit={isRate(key) ? "%" : "€"}
+          hint={hint}
+          value={draft[key] ?? ""}
+          onChange={(value) => setDraft({ ...draft, [key]: value })}
+        />
+      ))}
+      {note && <small>{note}</small>}
+      {feedback}
+      <button type="submit" disabled={busy}>
+        Enregistrer
+      </button>
+    </form>
+  );
+}
+
+const FEES: Field[] = [
+  { key: "standard_fee_cents", label: "Tarif standard" },
+  { key: "home_visit_fee_cents", label: "Tarif à domicile" },
+];
+
+const PROVISIONS: Field[] = [
+  {
+    key: "tax_provision_bp",
+    label: "Provision impôt",
+    hint: "du CA encaissé moins les charges",
+  },
+  {
+    key: "urssaf_provision_bp",
+    label: "Provision URSSAF",
+    hint: "du CA encaissé, net des rétrocessions",
+  },
+];
+
+export function FeeSettings() {
+  return (
+    <BillingForm
+      fields={FEES}
+      note="Le tarif reste modifiable séance par séance."
+      success="Tarifs enregistrés."
     />
   );
+}
 
-  return (
-    <section>
-      <h2>Tarifs et provisions</h2>
-      <form onSubmit={(e) => void submit(e)}>
-        {field("standard_fee", "Tarif standard", "€")}
-        {field("home_visit_fee", "Tarif à domicile", "€")}
-        {field(
-          "tax_provision",
-          "Provision impôt",
-          "%",
-          "du CA encaissé moins les charges",
-        )}
-        {field(
-          "urssaf_provision",
-          "Provision URSSAF",
-          "%",
-          "du CA encaissé, net des rétrocessions",
-        )}
-        <small>Le tarif reste modifiable séance par séance.</small>
-        {feedback}
-        <button type="submit" disabled={busy}>
-          Enregistrer
-        </button>
-      </form>
-    </section>
-  );
+export function ProvisionSettings() {
+  return <BillingForm fields={PROVISIONS} success="Provisions enregistrées." />;
 }

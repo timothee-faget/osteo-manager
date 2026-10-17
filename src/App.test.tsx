@@ -4,7 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import App from "./App";
-import { fakeBackend, openSettings, RECOVERY_KEY } from "./test/fakeBackend";
+import {
+  fakeBackend,
+  openSettingsSection,
+  RECOVERY_KEY,
+} from "./test/fakeBackend";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
@@ -138,7 +142,7 @@ test("enregistre le délai de verrouillage", async () => {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   render(<App />);
-  await openSettings(user);
+  await openSettingsSection(user, "Verrouillage");
 
   const field = await screen.findByLabelText(
     "Verrouillage automatique après (minutes)",
@@ -160,7 +164,7 @@ test("choix du dossier de sauvegarde puis sauvegarde immédiate", async () => {
   const state = fakeBackend("unlocked");
   vi.mocked(open).mockResolvedValue("/Volumes/Disque/Osteo");
   render(<App />);
-  await openSettings(user);
+  await openSettingsSection(user, "Sauvegarde");
 
   expect(
     await screen.findByText(/les données ne sont pas sauvegardées/),
@@ -201,7 +205,7 @@ test("restaurer depuis l'accueil demande confirmation", async () => {
   fakeBackend("unlocked");
   vi.mocked(open).mockResolvedValue("/tmp/a.osteobackup");
   render(<App />);
-  await openSettings(user);
+  await openSettingsSection(user, "Sauvegarde");
 
   const restore = await screen.findByRole("button", {
     name: "Restaurer une sauvegarde…",
