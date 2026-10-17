@@ -8,8 +8,19 @@ import {
   SESSION_STATUSES,
   sessionsApi,
 } from "../patients/sessionsApi";
+import { Icon, type IconName } from "../icons";
+import { settingsApi } from "../settings/api";
 import { dashboardApi, type Dashboard, type UnbilledSession } from "./api";
 import { PatientSearch } from "./PatientSearch";
+
+/** "samedi 17 octobre 2026". */
+const today = () =>
+  new Date().toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 
 const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
 
@@ -24,7 +35,7 @@ type Open = "unbilled" | "unsent" | "reminders" | null;
 
 /**
  * Home page, for the two reasons to open the app: start a session, and deal with
- * billing. Then a summary of the figures and the latest sessions.
+ * billing. Key figures on top, then the latest sessions next to the to-dos.
  */
 export function DashboardPage({
   onOpenPatient,
@@ -41,6 +52,7 @@ export function DashboardPage({
   onOpenAccounting: () => void;
 }) {
   const [d, setD] = useState<Dashboard | null>(null);
+  const [firstName, setFirstName] = useState("");
   const [open, setOpen] = useState<Open>(null);
   const [confirm, setConfirm] = useState<UnbilledSession | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,6 +63,7 @@ export function DashboardPage({
 
   useEffect(() => {
     void dashboardApi.get().then(setD);
+    void settingsApi.practitioner().then((p) => setFirstName(p.first_name));
   }, []);
 
   async function validate(s: UnbilledSession) {
@@ -74,121 +87,203 @@ export function DashboardPage({
   const ytd = d.year_to_date;
   const toggle = (o: Open) => setOpen(open === o ? null : o);
 
-  /** A to-do entry; greyed out once there is nothing left. */
+  /** A to-do entry with its action; checked off once there is nothing left. */
   const todo = (
+    icon: IconName,
     count: number,
     label: string,
+    detail: string,
     done: string,
+    action: string,
     onClick: () => void,
     o?: Open,
   ) =>
     count === 0 ? (
-      <button type="button" className="done" disabled>
-        ✓ {done}
-      </button>
+      <li className="done">
+        <span className="todo-icon">
+          <Icon name="check" />
+        </span>
+        <div>
+          <strong>{done}</strong>
+        </div>
+      </li>
     ) : (
-      <button
-        type="button"
-        aria-expanded={o ? open === o : undefined}
-        onClick={onClick}
-      >
-        {label}
-      </button>
+      <li className={icon === "alert" ? "urgent" : undefined}>
+        <span className="todo-icon">
+          <Icon name={icon} />
+        </span>
+        <div>
+          <strong>{label}</strong>
+          <small>{detail}</small>
+        </div>
+        <button
+          type="button"
+          aria-label={`${action} : ${label}`}
+          aria-expanded={o ? open === o : undefined}
+          onClick={onClick}
+        >
+          {action}
+        </button>
+      </li>
     );
+
+  const kpi = (icon: IconName, label: string, value: string, note?: string) => (
+    <div className="kpi">
+      <span className="kpi-icon">
+        <Icon name={icon} />
+      </span>
+      <dl>
+        <dt>{label}</dt>
+        <dd>{value}</dd>
+        {note && <dd>{note}</dd>}
+      </dl>
+    </div>
+  );
 
   return (
     <section className="home">
-      <header>
-        <h2>Accueil</h2>
-        <button type="button" onClick={() => onNewPatient("")}>
+      <header className="home-header">
+        <div>
+          <h2>Bonjour{firstName && `, ${firstName}`}</h2>
+          <span className="subtitle">{today()}</span>
+        </div>
+        <PatientSearch
+          onOpen={(id) => onOpenPatient(id)}
+          onNewSession={(id) => onOpenPatient(id, { newSession: true })}
+          onCreate={onNewPatient}
+        />
+        <button type="button" className="cta" onClick={() => onNewPatient("")}>
+          <Icon name="plus" />
           Nouveau patient
         </button>
       </header>
-      <PatientSearch
-        onOpen={(id) => onOpenPatient(id)}
-        onNewSession={(id) => onOpenPatient(id, { newSession: true })}
-        onCreate={onNewPatient}
-      />
+
+      <div className="kpis">
+        {kpi(
+          "euro",
+          `CA encaissé en ${formatMonth(d.month.from.slice(0, 7))}`,
+          formatEuros(d.month.receipts_cents),
+          evolution(
+            d.month.receipts_cents,
+            d.month_last_year.receipts_cents,
+            year - 1,
+          ) ?? undefined,
+        )}
+        {kpi(
+          "activity",
+          "Séances ce mois",
+          String(d.month.sessions),
+          d.month.sessions > 0
+            ? `Panier moyen ${formatEuros(d.month.average_cents)}`
+            : undefined,
+        )}
+        {kpi(
+          "trend",
+          "Résultat estimé",
+          formatEuros(ytd.result_cents),
+          "Depuis le 1er janvier",
+        )}
+        {kpi(
+          "piggy",
+          "Provisions impôt + URSSAF",
+          formatEuros(ytd.tax_provision_cents + ytd.urssaf_provision_cents),
+          "À mettre de côté",
+        )}
+      </div>
+      <button type="button" className="link" onClick={onOpenAccounting}>
+        Détail dans Comptabilité →
+      </button>
 
       <div className="home-grid">
-        <section>
+        <section className="card">
+          <h3>Dernières séances</h3>
+          {d.recent_sessions.length === 0 ? (
+            <p>Aucune séance pour l'instant.</p>
+          ) : (
+            <table aria-label="Dernières séances">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Patient</th>
+                  <th>Motif</th>
+                  <th>Tarif</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.recent_sessions.map((s) => (
+                  <tr key={s.session_id}>
+                    <td>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() =>
+                          onOpenPatient(s.patient_id, {
+                            sessionId: s.session_id,
+                          })
+                        }
+                      >
+                        {formatDateTime(s.starts_at)}
+                      </button>
+                    </td>
+                    <td>{s.patient_name}</td>
+                    <td>{s.reason}</td>
+                    <td>{formatEuros(s.fee_cents)}</td>
+                    <td>
+                      <span className={`status status-${s.status}`}>
+                        {SESSION_STATUSES[s.status]}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="card">
           <h3>À traiter</h3>
-          <div className="todo">
+          <ul className="todo">
             {todo(
+              "activity",
               d.unbilled_sessions.length,
-              `Séances non facturées : ${plural(d.unbilled_sessions.length, "séance")}, ${formatEuros(d.unbilled_cents)}`,
+              `${plural(d.unbilled_sessions.length, "séance")} à facturer`,
+              formatEuros(d.unbilled_cents),
               "Toutes les séances sont facturées",
+              "Facturer",
               () => toggle("unbilled"),
               "unbilled",
             )}
             {todo(
+              "send",
               d.unsent_count,
-              `Factures non envoyées : ${plural(d.unsent_count, "facture")}, ${formatEuros(d.unsent_cents)}`,
+              `${plural(d.unsent_count, "facture")} non ${d.unsent_count > 1 ? "envoyées" : "envoyée"}`,
+              formatEuros(d.unsent_cents),
               "Toutes les factures sont envoyées",
+              "Envoyer",
               () => toggle("unsent"),
               "unsent",
             )}
             {todo(
+              "bank",
+              d.cheques_to_deposit,
+              `${plural(d.cheques_to_deposit, "chèque")} à remettre`,
+              formatEuros(d.cheques_to_deposit_cents),
+              "Aucun chèque à remettre",
+              "Remettre",
+              onOpenCollections,
+            )}
+            {todo(
+              "alert",
               d.unpaid_count,
-              `Impayés : ${plural(d.unpaid_count, "facture")}, ${formatEuros(d.unpaid_cents)}`,
+              `${plural(d.unpaid_count, "facture")} ${d.unpaid_count > 1 ? "impayées" : "impayée"}`,
+              formatEuros(d.unpaid_cents),
               "Aucun impayé",
+              "Relancer",
               () => toggle("reminders"),
               "reminders",
             )}
-            {todo(
-              d.cheques_to_deposit,
-              `Chèques à remettre : ${plural(d.cheques_to_deposit, "chèque")}, ${formatEuros(d.cheques_to_deposit_cents)}`,
-              "Aucun chèque à remettre",
-              onOpenCollections,
-            )}
-          </div>
-        </section>
-
-        <section>
-          <h3>Bilan</h3>
-          <dl className="cards">
-            <div>
-              <dt>CA encaissé en {formatMonth(d.month.from.slice(0, 7))}</dt>
-              <dd>{formatEuros(d.month.receipts_cents)}</dd>
-              <dd>
-                <small>
-                  {evolution(
-                    d.month.receipts_cents,
-                    d.month_last_year.receipts_cents,
-                    year - 1,
-                  )}
-                </small>
-              </dd>
-            </div>
-            <div>
-              <dt>CA encaissé depuis le 1er janvier</dt>
-              <dd>{formatEuros(ytd.receipts_cents)}</dd>
-              <dd>
-                <small>
-                  {evolution(
-                    ytd.receipts_cents,
-                    d.year_to_date_last_year.receipts_cents,
-                    year - 1,
-                  )}
-                </small>
-              </dd>
-            </div>
-            <div>
-              <dt>Résultat estimé depuis le 1er janvier</dt>
-              <dd>{formatEuros(ytd.result_cents)}</dd>
-            </div>
-            <div>
-              <dt>Provisions impôt + URSSAF</dt>
-              <dd>
-                {formatEuros(
-                  ytd.tax_provision_cents + ytd.urssaf_provision_cents,
-                )}
-              </dd>
-            </div>
-          </dl>
-          <button type="button" className="link" onClick={onOpenAccounting}>
-            Détail dans Comptabilité →
-          </button>
+          </ul>
         </section>
       </div>
 
@@ -277,48 +372,6 @@ export function DashboardPage({
             Détail des impayés dans Encaissements →
           </button>
         </>
-      )}
-
-      <h3>Dernières séances</h3>
-      {d.recent_sessions.length === 0 ? (
-        <p>Aucune séance pour l'instant.</p>
-      ) : (
-        <table aria-label="Dernières séances">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Patient</th>
-              <th>Motif</th>
-              <th>Tarif</th>
-              <th>Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.recent_sessions.map((s) => (
-              <tr key={s.session_id}>
-                <td>
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() =>
-                      onOpenPatient(s.patient_id, { sessionId: s.session_id })
-                    }
-                  >
-                    {formatDateTime(s.starts_at)}
-                  </button>
-                </td>
-                <td>{s.patient_name}</td>
-                <td>{s.reason}</td>
-                <td>{formatEuros(s.fee_cents)}</td>
-                <td>
-                  <span className={`status status-${s.status}`}>
-                    {SESSION_STATUSES[s.status]}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       )}
     </section>
   );

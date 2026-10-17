@@ -18,6 +18,7 @@ Spec complète : @docs/SPEC.md
 - Code, identifiants et commits en **anglais** ; interface utilisateur en **français**.
 - Termes métier : patient, session (séance), invoice (facture), credit note (avoir), payment, cheque deposit (remise de chèques), expense, fixed asset (immobilisation), practice location (lieu d'exercice).
 - Logique métier et accès DB côté Rust (commandes Tauri) ; le front ne fait que de l'affichage et de la saisie.
+- Interface : respecter les règles d'or de [docs/DESIGN.md](docs/DESIGN.md) (variables CSS, hauteurs, statuts, thème clair/sombre).
 
 ## Workflow
 

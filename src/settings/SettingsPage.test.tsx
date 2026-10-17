@@ -139,3 +139,20 @@ test("tarifs et provisions : valeurs par défaut puis modification en centimes e
     urssaf_provision_bp: 2550,
   });
 });
+
+test("le thème s'applique tout de suite et est retenu", async () => {
+  const { user } = await setup();
+  const s = await section("Apparence");
+  expect(s.getByRole("button", { name: "Auto" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await user.click(s.getByRole("button", { name: "Sombre" }));
+  expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  expect(localStorage.getItem("theme")).toBe("dark");
+
+  await user.click(s.getByRole("button", { name: "Auto" }));
+  expect(document.documentElement).not.toHaveAttribute("data-theme");
+  expect(localStorage.getItem("theme")).toBe("auto");
+});

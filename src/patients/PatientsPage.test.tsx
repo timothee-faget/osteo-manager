@@ -49,10 +49,12 @@ test("création d'une fiche puis retour à la liste", async () => {
   await user.type(screen.getByLabelText("Nom"), "Dupont");
   await user.type(screen.getByLabelText("Prénom"), "Anne");
   await user.type(screen.getByLabelText("Date de naissance"), "1980-05-12");
+  await user.click(screen.getByRole("tab", { name: "Antécédents" }));
   await user.type(
     screen.getByLabelText("Chirurgicaux"),
     "Appendicectomie 1995",
   );
+  await user.click(screen.getByRole("tab", { name: "Revue des systèmes" }));
   await user.type(screen.getByLabelText("Hygiène de vie"), "Sommeil correct");
   await user.click(screen.getByRole("button", { name: "Créer la fiche" }));
 
@@ -89,6 +91,7 @@ test("le nom est obligatoire", async () => {
 test("modification d'une fiche existante", async () => {
   const { user, state } = await setup();
   await createPatient(user, "Dupont", "Anne");
+  await user.click(screen.getByRole("tab", { name: "Revue des systèmes" }));
   await user.type(screen.getByLabelText("Digestif"), "Reflux");
   await user.click(screen.getByRole("button", { name: "Enregistrer" }));
   expect(await screen.findByRole("status")).toHaveTextContent(

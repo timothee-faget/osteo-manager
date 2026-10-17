@@ -116,7 +116,7 @@ function PatientList({
     <section>
       <header>
         <h2>Patients</h2>
-        <button className="primary" type="button" onClick={onNew}>
+        <button className="cta" type="button" onClick={onNew}>
           Nouveau patient
         </button>
       </header>
@@ -196,14 +196,6 @@ function PatientRecord({
   }
 
   if (!patient) return null;
-  const focusSession = newSession === true || sessionId !== undefined;
-  const sessions = (
-    <SessionsSection
-      patientId={patient.id}
-      startNew={newSession}
-      openSessionId={sessionId}
-    />
-  );
   return (
     <section>
       <button type="button" className="link" onClick={onBack}>
@@ -219,20 +211,27 @@ function PatientRecord({
         </button>
       </header>
       {message && <p role="status">{message}</p>}
-      {/* Opened for a session: show it first, above the record. */}
-      {focusSession && sessions}
-      <PatientForm
-        initial={patient}
-        isMinor={patient.is_minor}
-        submitLabel="Enregistrer"
-        onSubmit={async (input) => {
-          const p = await patientsApi.update(id, input);
-          setPatient(p);
-          return p;
-        }}
-      />
-      {!focusSession && sessions}
-      <AttachmentsSection patientId={patient.id} />
+      {/* A session being edited goes full width above the record (CSS). */}
+      <div className="record-grid">
+        <PatientForm
+          initial={patient}
+          isMinor={patient.is_minor}
+          submitLabel="Enregistrer"
+          onSubmit={async (input) => {
+            const p = await patientsApi.update(id, input);
+            setPatient(p);
+            return p;
+          }}
+          attachments={<AttachmentsSection patientId={patient.id} />}
+        />
+        <div className="card sessions">
+          <SessionsSection
+            patientId={patient.id}
+            startNew={newSession}
+            openSessionId={sessionId}
+          />
+        </div>
+      </div>
     </section>
   );
 }

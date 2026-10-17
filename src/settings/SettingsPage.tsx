@@ -1,5 +1,6 @@
 import { BackupSettings } from "../backup/BackupSettings";
 import { MailSettings } from "../mail/MailSettings";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { AutoLockSettings } from "./AutoLockSettings";
 import { BillingSettings } from "./BillingSettings";
 import { LocationSettings } from "./LocationSettings";
@@ -21,6 +22,7 @@ export function SettingsPage({
       <LocationSettings />
       <BillingSettings />
       <MailSettings />
+      <AppearanceSettings />
       <AutoLockSettings minutes={autoLock} onChange={onAutoLockChange} />
       <BackupSettings onRestored={onRestored} />
     </div>
