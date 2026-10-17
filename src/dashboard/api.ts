@@ -13,6 +13,15 @@ export type Period = {
   urssaf_provision_cents: number;
 };
 
+export type UnbilledSession = {
+  session_id: number;
+  patient_id: number;
+  patient_name: string;
+  starts_at: string;
+  reason: string;
+  fee_cents: number;
+};
+
 export type Dashboard = {
   month: Period;
   month_last_year: Period;
@@ -23,6 +32,8 @@ export type Dashboard = {
   unpaid_cents: number;
   cheques_to_deposit: number;
   cheques_to_deposit_cents: number;
+  unbilled_sessions: UnbilledSession[];
+  unbilled_cents: number;
 };
 
 export const dashboardApi = {

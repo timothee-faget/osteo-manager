@@ -10,6 +10,7 @@ use crate::cheque_deposits;
 use crate::expenses::RETROCESSION;
 use crate::invoices;
 use crate::session::{SessionError, State};
+use crate::sessions::{self, UnbilledSession};
 use crate::settings::{self, BillingSettings};
 
 type Result<T> = std::result::Result<T, SessionError>;
@@ -54,6 +55,9 @@ pub struct Dashboard {
     pub unpaid_cents: i64,
     pub cheques_to_deposit: i64,
     pub cheques_to_deposit_cents: i64,
+    /// Draft sessions, oldest first, and their total fees.
+    pub unbilled_sessions: Vec<UnbilledSession>,
+    pub unbilled_cents: i64,
 }
 
 fn iso(d: NaiveDate) -> String {
@@ -156,6 +160,7 @@ pub fn dashboard(conn: &Connection, today: NaiveDate) -> Result<Dashboard> {
         .collect::<rusqlite::Result<_>>()?;
     let unpaid = invoices::unpaid(conn, today)?;
     let cheques = cheque_deposits::pending(conn)?;
+    let unbilled = sessions::unbilled(conn)?;
     Ok(Dashboard {
         month: period(conn, first_of_month(today), today, &rates)?,
         month_last_year: period(conn, first_of_month(last_year), last_year, &rates)?,
@@ -166,6 +171,8 @@ pub fn dashboard(conn: &Connection, today: NaiveDate) -> Result<Dashboard> {
         unpaid_cents: unpaid.total_cents,
         cheques_to_deposit: cheques.len() as i64,
         cheques_to_deposit_cents: cheques.iter().map(|c| c.amount_cents).sum(),
+        unbilled_sessions: unbilled.sessions,
+        unbilled_cents: unbilled.total_cents,
     })
 }
 
@@ -253,6 +260,7 @@ mod tests {
         );
         spend(&mut f, "2026-10-05", "rent", 5000);
         spend(&mut f, "2026-10-06", RETROCESSION, 1000);
+        let draft = f.session("2026-10-16T09:00");
 
         let d = dashboard(&f.conn, day("2026-10-17")).unwrap();
         let m = &d.month;
@@ -285,6 +293,14 @@ mod tests {
             (d.cheques_to_deposit, d.cheques_to_deposit_cents),
             (1, 6000)
         );
+        assert_eq!(
+            d.unbilled_sessions
+                .iter()
+                .map(|s| s.session_id)
+                .collect::<Vec<_>>(),
+            [draft.id]
+        );
+        assert_eq!(d.unbilled_cents, 6000);
         assert_eq!(
             d.by_location,
             [LocationShare {
