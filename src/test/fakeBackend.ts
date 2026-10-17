@@ -567,6 +567,7 @@ export function fakeBackend(initial: LockStatus) {
       case "cancel_invoice": {
         const i = state.invoices.find((x) => x.id === a.id)!;
         if (i.credit_note) throw { code: "invalid_invoice_cancelled" };
+        if (paidOf(i.id) > 0) throw { code: "invalid_invoice_has_payments" };
         state.creditSeq += 1;
         i.credit_note = {
           id: state.creditSeq,

@@ -146,6 +146,29 @@ test("annulation par un avoir", async () => {
   expect(invoke).toHaveBeenCalledWith("get_credit_note_pdf", { id: 1 });
 });
 
+test("pas d'avoir sur une facture qui a des paiements", async () => {
+  const { user, state } = await setup();
+  state.payments = [
+    {
+      id: 1,
+      invoice_id: 1,
+      amount_cents: 6000,
+      method: "cash",
+      received_on: "2026-10-16",
+      reference: "",
+      created_at: "2026-10-16T10:00:00",
+      deposit_id: null,
+    },
+  ];
+  const d = await openInvoice(user);
+  await user.click(d.getByRole("button", { name: "Annuler par un avoir…" }));
+  await user.click(d.getByRole("button", { name: "Émettre l'avoir" }));
+  expect(await d.findByRole("alert")).toHaveTextContent(
+    "Cette facture a des paiements : supprimez-les d'abord",
+  );
+  expect(state.invoices[0].credit_note).toBeNull();
+});
+
 test("paiement depuis la facture : dépassement refusé, statut, suppression", async () => {
   const { user, state } = await setup();
   const row = (

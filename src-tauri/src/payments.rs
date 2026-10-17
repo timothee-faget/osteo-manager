@@ -305,6 +305,30 @@ mod tests {
     }
 
     #[test]
+    fn invoice_with_payments_cannot_be_cancelled() {
+        let mut f = fixture();
+        let inv = f.invoice("2026-10-16");
+        let p = add(
+            &mut f.conn,
+            &input(inv.id, 2000, PaymentMethod::Cash),
+            day("2026-10-16"),
+        )
+        .unwrap();
+        let r = invoices::cancel(&mut f.conn, inv.id, "", day("2026-10-16"));
+        assert_eq!(invalid_field(r), "invoice_has_payments");
+        assert!(
+            invoices::get_view(&f.conn, inv.id)
+                .unwrap()
+                .credit_note
+                .is_none()
+        );
+
+        // Once the payment is taken off, the invoice can be cancelled.
+        delete(&f.conn, p.id).unwrap();
+        invoices::cancel(&mut f.conn, inv.id, "", day("2026-10-16")).unwrap();
+    }
+
+    #[test]
     fn deleting_a_payment_reopens_the_invoice() {
         let mut f = fixture();
         let inv = f.invoice("2026-10-16");
