@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SessionStatus } from "../patients/sessionsApi";
 
 export type Period = {
   from: string;
@@ -22,6 +23,16 @@ export type UnbilledSession = {
   fee_cents: number;
 };
 
+export type RecentSession = {
+  session_id: number;
+  patient_id: number;
+  patient_name: string;
+  starts_at: string;
+  reason: string;
+  fee_cents: number;
+  status: SessionStatus;
+};
+
 export type Dashboard = {
   month: Period;
   month_last_year: Period;
@@ -34,6 +45,9 @@ export type Dashboard = {
   cheques_to_deposit_cents: number;
   unbilled_sessions: UnbilledSession[];
   unbilled_cents: number;
+  unsent_count: number;
+  unsent_cents: number;
+  recent_sessions: RecentSession[];
 };
 
 export const dashboardApi = {

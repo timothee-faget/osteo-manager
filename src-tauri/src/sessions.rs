@@ -151,6 +151,59 @@ pub fn unbilled(conn: &Connection) -> Result<Unbilled> {
     })
 }
 
+/// Where a session stands in its billing, most advanced step only.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionStatus {
+    Unbilled,
+    Invoiced,
+    Sent,
+    PartiallyPaid,
+    Paid,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RecentSession {
+    pub session_id: i64,
+    pub patient_id: i64,
+    pub patient_name: String,
+    pub starts_at: String,
+    pub reason: String,
+    pub fee_cents: i64,
+    pub status: SessionStatus,
+}
+
+/// The latest `limit` sessions, newest first, with their billing status.
+pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COLUMNS}, p.last_name || ' ' || p.first_name,
+            EXISTS (SELECT 1 FROM invoice_sending x WHERE x.invoice_id = i.id)
+         FROM {FROM} JOIN patient p ON p.id = s.patient_id
+         ORDER BY s.starts_at DESC, s.id DESC LIMIT ?1"
+    ))?;
+    let rows = stmt.query_map([limit], |r| {
+        let session = from_row(r)?;
+        let sent: bool = r.get(18)?;
+        let status = match session.payment_status {
+            None => SessionStatus::Unbilled,
+            Some(PaymentStatus::Paid) => SessionStatus::Paid,
+            Some(PaymentStatus::PartiallyPaid) => SessionStatus::PartiallyPaid,
+            Some(PaymentStatus::Unpaid) if sent => SessionStatus::Sent,
+            Some(PaymentStatus::Unpaid) => SessionStatus::Invoiced,
+        };
+        Ok(RecentSession {
+            session_id: session.id,
+            patient_id: session.data.patient_id,
+            patient_name: r.get(17)?,
+            starts_at: session.data.starts_at,
+            reason: session.data.reason,
+            fee_cents: session.data.fee_cents,
+            status,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
 /// The fee to pre-fill: home-visit fee at the patient's home, standard fee elsewhere.
 pub fn default_fee(conn: &Connection, location_id: i64) -> Result<i64> {
     let location = settings::location(conn, location_id)?;
@@ -754,5 +807,53 @@ mod tests {
             invalid_field(invoices::invoice_pdf(&f.conn, 999)),
             "invoice"
         );
+    }
+
+    #[test]
+    fn recent_sessions_newest_first_with_their_billing_status() {
+        use crate::payments::{self, PaymentInput, PaymentMethod};
+        let mut f = fixture();
+        let pay = |f: &mut crate::test_support::Fixture, invoice_id, amount_cents| {
+            let p = PaymentInput {
+                invoice_id,
+                amount_cents,
+                method: PaymentMethod::Cash,
+                received_on: "2026-10-12".into(),
+                reference: "".into(),
+            };
+            payments::add(&mut f.conn, &p, day("2026-10-12")).unwrap();
+        };
+        let draft = f.session("2026-10-05T09:00");
+        let invoiced = f.invoice("2026-10-06");
+        let sent = f.invoice("2026-10-07");
+        invoices::set_sent(&f.conn, sent.id, true).unwrap();
+        let partial = f.invoice("2026-10-08");
+        pay(&mut f, partial.id, 2000);
+        // Paid wins over sent.
+        let paid = f.invoice("2026-10-09");
+        invoices::set_sent(&f.conn, paid.id, true).unwrap();
+        pay(&mut f, paid.id, 6000);
+        // A cancelled invoice makes its session a draft again.
+        let cancelled = f.invoice("2026-10-10");
+        invoices::cancel(&mut f.conn, cancelled.id, "Erreur", day("2026-10-11")).unwrap();
+
+        let list = recent(&f.conn, 10).unwrap();
+        assert_eq!(
+            list.iter()
+                .map(|s| (s.session_id, s.status))
+                .collect::<Vec<_>>(),
+            [
+                (cancelled.session_id, SessionStatus::Unbilled),
+                (paid.session_id, SessionStatus::Paid),
+                (partial.session_id, SessionStatus::PartiallyPaid),
+                (sent.session_id, SessionStatus::Sent),
+                (invoiced.session_id, SessionStatus::Invoiced),
+                (draft.id, SessionStatus::Unbilled),
+            ]
+        );
+        assert_eq!(list[0].patient_name, "Dupont Anne");
+        assert_eq!(list[0].starts_at, "2026-10-10T09:00");
+
+        assert_eq!(recent(&f.conn, 2).unwrap().len(), 2);
     }
 }

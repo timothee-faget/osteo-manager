@@ -48,6 +48,9 @@ test("chiffres clés, comparaison N-1, à traiter et répartition par lieu", asy
     cheques_to_deposit_cents: 6000,
     unbilled_sessions: [],
     unbilled_cents: 0,
+    unsent_count: 0,
+    unsent_cents: 0,
+    recent_sessions: [],
   };
   render(<App />);
 
