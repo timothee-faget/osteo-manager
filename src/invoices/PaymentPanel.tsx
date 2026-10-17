@@ -68,7 +68,7 @@ export function PaymentPanel({
                 <td>{formatDate(p.received_on)}</td>
                 <td>{PAYMENT_METHODS[p.method]}</td>
                 <td>{p.reference}</td>
-                <td>{formatEuros(p.amount_cents)}</td>
+                <td className="num">{formatEuros(p.amount_cents)}</td>
                 <td>
                   {p.deposit_id !== null ? (
                     `Remis en banque (remise n° ${p.deposit_id})`

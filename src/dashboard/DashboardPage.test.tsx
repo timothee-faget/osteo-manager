@@ -201,7 +201,7 @@ test("les séances non facturées se déplient et se valident sur place", async 
   );
   expect(list.getAllByRole("row")).toHaveLength(3);
   const first = list.getByText("14/10/2026 à 09:00").parentElement!;
-  expect(within(first).getByText("Dupont Anne")).toBeInTheDocument();
+  expect(within(first).getByText("DUPONT Anne")).toBeInTheDocument();
 
   await user.click(within(first).getByRole("button", { name: "Valider" }));
   await user.click(

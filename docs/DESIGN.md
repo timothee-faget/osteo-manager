@@ -56,7 +56,7 @@ DM Sans uniquement, poids 400, 500 et 600 (jamais de gras 700).
 | `--cta` / `--on-cta`                             | L'action principale de l'en-tête de page (encre foncée)   |
 | `--success`, `--warning`, `--danger` (+ `-soft`) | Statuts uniquement                                        |
 
-- Chaque variable a sa valeur sombre (§ 8). Une couleur absente de cette liste n'existe pas.
+- Chaque variable a sa valeur sombre (§ 10). Une couleur absente de cette liste n'existe pas.
 - La couleur n'est jamais seule porteuse de sens : un statut a toujours son texte.
 
 ## 5. Surfaces et rayons
@@ -65,6 +65,9 @@ DM Sans uniquement, poids 400, 500 et 600 (jamais de gras 700).
 - **Carte** (`.card`) : `--surface`, ombre `--shadow`, rayon `--radius` (1rem), pas de bordure. Une carte regroupe un sujet (une liste, un formulaire), pas chaque élément.
 - **Tuile de chiffre clé** (`.kpi`) : fond `--tile` uni, rayon `--radius`, icône dans un rond `--surface`.
 - **Tableau** : jamais de fond ni de cadre propre. Posé sur la page ou dans une carte, en-têtes `--muted`, lignes séparées par `--line`.
+  - Colonne de montants ou de pourcentages : `.num` sur le `th` **et** les `td` (aligné à droite, jamais coupé).
+  - Nom de patient en cellule de texte simple : `.patient` (jamais coupé ; c'est le motif voisin qui passe à la ligne).
+- **Formulaire de saisie** (`.expense-form`) : largeur max 48rem, jamais étiré sur toute la page.
 - **Rayons** : `--radius` pour cartes, tuiles, groupes ; `--radius-sm` (0.625rem) pour champs, zones de texte, menus ; `--radius-pill` pour boutons, recherches, pastilles, onglets et éléments de navigation.
 
 ## 6. Boutons
@@ -76,13 +79,27 @@ Quatre variantes, pas une de plus :
 | `button` (défaut)            | Action secondaire : contour `--line`, fond `--surface`                   |
 | `type="submit"` / `.primary` | Valider un formulaire ou confirmer : fond `--accent`                     |
 | `.cta`                       | L'action principale d'une page, dans son en-tête. **Une seule par page** |
-| `.link`                      | Navigation dans le texte (« ← Patients », « Détail… → »)                 |
+
+- Toute page commence par un `<header>` : le `h2` à gauche, ses actions à droite. L'action qui crée ou lance le travail de la page (« Nouveau patient », « Nouvelle dépense », « Envoyer les factures non envoyées… ») y est en `.cta`, jamais un `.primary` posé dans le corps de la page.
+- `.primary` / `submit` est réservé à la validation d'un formulaire ou d'une confirmation.
+  | `.link` | Navigation dans le texte (« ← Patients », « Détail… → ») |
 
 - Dans une cellule de tableau, un `.link` s'affiche comme le libellé de la ligne (texte `--ink`, souligné au survol seulement).
 - Libellé = ce que fait le bouton (« Envoyer », « Relancer »), à l'infinitif ou à l'impératif.
 - Une icône devant le libellé est permise, jamais une icône seule sans `aria-label`.
 
-## 7. Statuts
+## 7. Composants partagés
+
+- **Changement d'année** : `YearNav` (`src/YearNav.tsx`). Chevrons `Icon` à gauche de l'année, total éventuel à droite. Jamais de glyphes ◀ ▶.
+- **Bloc repliable** hors paramètres : `<details className="disclosure">` avec un `Icon name="chevron"` dans le `summary`, comme `Fold`. Jamais le triangle natif.
+- **Recherche** : `.search-field` (icône loupe + `input type="search"`), en pilule, partout où l'on cherche (accueil, recherche rapide).
+
+## 8. Noms de patients
+
+- Dans les listes et en-têtes issus de la fiche patient : **« DUPONT Anne »** (nom en capitales, puis prénom).
+- Les listes de factures, avoirs, chèques et impayés affichent le nom **tel qu'imprimé sur la facture** (« Anne Dupont ») : c'est une donnée figée du document, on ne la reformate pas.
+
+## 9. Statuts
 
 Toujours `.status` + une classe de statut, en pastille `--surface` avec texte coloré :
 
@@ -94,20 +111,21 @@ Toujours `.status` + une classe de statut, en pastille `--surface` avec texte co
 | `status-invoiced`, `status-unsent`         | `--accent-dark` | Facturée, Non envoyée             |
 | `status-sent`, `status-cancelled`          | `--ink-soft`    | Envoyée, Annulée                  |
 
-## 8. Thème clair et sombre
+## 10. Thème clair et sombre
 
 - Réglage Auto / Clair / Sombre dans Paramètres → Apparence (`src/theme.ts`, attribut `data-theme` sur `<html>`). Auto suit macOS.
 - Le sombre n'est pas une inversion : fond brun très foncé chaud, cartes un cran plus claires, terracotta éclairci.
 - Toute nouvelle variable est définie trois fois : `:root` (clair), `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])`, et `:root[data-theme="dark"]`.
 
-## 9. Icônes
+## 11. Icônes
 
 - Composant `Icon` (`src/icons.tsx`) : SVG au trait, grille 24, épaisseur 1.6, taille `--icon`, couleur `currentColor`.
-- Usages : navigation, tuiles, lignes « À traiter », recherche. Pas d'emoji.
+- Usages : navigation, tuiles, lignes « À traiter », recherche, chevrons (repli, année). Pas d'emoji ni de flèche Unicode servant d'icône.
 
 ## Avant une PR qui touche l'interface
 
 - [ ] Aucune couleur, hauteur, rayon ou taille de texte en dur hors de `:root`.
 - [ ] Contrôles côte à côte de même hauteur ; boutons de tableau compacts.
 - [ ] Vérifié en clair **et** en sombre.
-- [ ] Au plus un `.cta` par page.
+- [ ] Au plus un `.cta` par page, dans l'en-tête.
+- [ ] Colonnes de montants en `.num`.

@@ -54,8 +54,8 @@ export function UnpaidInvoices({
                 <th>Facture</th>
                 <th>Date</th>
                 <th>Patient</th>
-                <th>Montant</th>
-                <th>Reste dû</th>
+                <th className="num">Montant</th>
+                <th className="num">Reste dû</th>
                 <th>Ancienneté</th>
                 <th>Relances</th>
               </tr>
@@ -74,8 +74,8 @@ export function UnpaidInvoices({
                   </td>
                   <td>{formatDate(i.issued_on)}</td>
                   <td>{i.patient_name}</td>
-                  <td>{formatEuros(i.amount_cents)}</td>
-                  <td>{formatEuros(i.remaining_cents)}</td>
+                  <td className="num">{formatEuros(i.amount_cents)}</td>
+                  <td className="num">{formatEuros(i.remaining_cents)}</td>
                   <td>{formatAge(i.age_days)}</td>
                   <td>
                     {i.last_reminder_at

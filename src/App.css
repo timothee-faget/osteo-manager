@@ -207,7 +207,7 @@ svg.icon {
   align-items: center;
   gap: var(--space-3);
   margin: 0 var(--space-2);
-  font-size: 1.15rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -294,7 +294,7 @@ nav button[aria-current="page"] svg,
   flex: 1;
   min-width: 0;
   max-width: 76rem;
-  padding: var(--space-6) 2.5rem 4rem;
+  padding: var(--space-6) var(--space-7) var(--space-7);
 }
 
 header {
@@ -401,6 +401,11 @@ button.link {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
   text-underline-offset: 0.2em;
+}
+
+/* In a row of actions, a link sits on the same line as its neighbours. */
+.actions > button.link {
+  align-self: center;
 }
 
 button.link:hover:not(:disabled) {
@@ -693,6 +698,8 @@ form.confirm > button {
 }
 
 .card > h3:first-child,
+.card > form:first-child > h3:first-child,
+.expense-form > h3:first-child,
 .card > header:first-child h3 {
   margin-top: 0;
 }
@@ -720,23 +727,27 @@ form.confirm > button {
   gap: 0;
 }
 
-.fold > summary {
+.fold > summary,
+.disclosure > summary {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   list-style: none;
 }
 
-.fold > summary::-webkit-details-marker {
+.fold > summary::-webkit-details-marker,
+.disclosure > summary::-webkit-details-marker {
   display: none;
 }
 
-.fold > summary > svg {
+.fold > summary > svg,
+.disclosure > summary > svg {
   color: var(--muted);
   transition: transform 0.15s;
 }
 
-.fold[open] > summary > svg {
+.fold[open] > summary > svg,
+.disclosure[open] > summary > svg {
   transform: rotate(90deg);
 }
 
@@ -806,10 +817,21 @@ form.confirm > button {
   gap: var(--space-4);
 }
 
+/* These cards space their children with gap; the header adds no margin of its own. */
+.invoice-detail > header,
+.batch-send > header {
+  margin-bottom: 0;
+}
+
 .session-form,
 .expense-form,
 .due {
   margin: var(--space-4) 0;
+}
+
+/* Long forms keep a readable measure instead of spanning the page. */
+.expense-form {
+  max-width: 48rem;
 }
 
 fieldset {
@@ -954,6 +976,18 @@ tr.total th {
   color: var(--ink);
 }
 
+/* Amount columns: right-aligned on the cents, never wrapped. */
+th.num,
+td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* A patient's name stays on one line; the reason next to it wraps instead. */
+td.patient {
+  white-space: nowrap;
+}
+
 /* Tables of amounts: figures aligned on the right. */
 table.figures td {
   text-align: right;
@@ -983,13 +1017,26 @@ td > button + button {
   margin: var(--space-2) 0 var(--space-4);
 }
 
+.year > :first-child {
+  margin-right: 0;
+}
+
 .year h3 {
   margin: 0;
 }
 
 .year button {
+  width: var(--control-h-sm);
   height: var(--control-h-sm);
-  padding: 0 var(--space-3);
+  padding: 0;
+}
+
+.year button:first-child svg {
+  transform: scaleX(-1);
+}
+
+.year > span {
+  margin-left: auto;
 }
 
 /* --- Home --- */
@@ -1250,10 +1297,15 @@ td > button + button {
 }
 
 .session-history header {
+  margin: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-3);
+}
+
+.session-history header > :first-child {
+  margin-right: 0;
 }
 
 .session-reason {

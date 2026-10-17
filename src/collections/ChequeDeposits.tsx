@@ -102,7 +102,7 @@ export function ChequeDeposits() {
                 <th>N° de chèque</th>
                 <th>Tireur</th>
                 <th>Facture</th>
-                <th>Montant</th>
+                <th className="num">Montant</th>
               </tr>
             </thead>
             <tbody>
@@ -120,7 +120,7 @@ export function ChequeDeposits() {
                   <td>{c.reference}</td>
                   <td>{c.drawer}</td>
                   <td>{c.invoice_number}</td>
-                  <td>{formatEuros(c.amount_cents)}</td>
+                  <td className="num">{formatEuros(c.amount_cents)}</td>
                 </tr>
               ))}
             </tbody>
@@ -201,7 +201,7 @@ export function ChequeDeposits() {
               <th>N°</th>
               <th>Date de dépôt</th>
               <th>Chèques</th>
-              <th>Total</th>
+              <th className="num">Total</th>
               <th />
             </tr>
           </thead>
@@ -211,7 +211,7 @@ export function ChequeDeposits() {
                 <td>{d.id}</td>
                 <td>{formatDate(d.deposited_on)}</td>
                 <td>{d.cheque_count}</td>
-                <td>{formatEuros(d.total_cents)}</td>
+                <td className="num">{formatEuros(d.total_cents)}</td>
                 <td className="actions">
                   <button
                     type="button"
