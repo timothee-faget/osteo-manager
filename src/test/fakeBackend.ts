@@ -493,6 +493,24 @@ export function fakeBackend(initial: LockStatus) {
       case "delete_fixed_asset":
         state.assets = state.assets.filter((x) => x.id !== a.id);
         return;
+      case "list_unpaid_invoices": {
+        const invoices = state.invoices
+          .map(withPayments)
+          .filter((i) => !i.credit_note && i.paid_cents < i.amount_cents)
+          .sort((x, y) => x.issued_on.localeCompare(y.issued_on))
+          .map((i) => ({
+            invoice_id: i.id,
+            number: i.number,
+            issued_on: i.issued_on,
+            patient_id: i.patient_id,
+            patient_name: i.patient_name,
+            amount_cents: i.amount_cents,
+            remaining_cents: i.amount_cents - i.paid_cents,
+            age_days: 3,
+          }));
+        const total_cents = invoices.reduce((t, i) => t + i.remaining_cents, 0);
+        return { invoices, total_cents };
+      }
       case "list_pending_cheques":
         return state.cheques.filter((c) => c.deposit === null).map(strip);
       case "list_cheque_deposits":

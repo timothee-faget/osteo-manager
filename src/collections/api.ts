@@ -34,3 +34,22 @@ export const depositsApi = {
       `Remise de chèques ${d.id} du ${d.deposited_on}.pdf`,
     ),
 };
+
+/** An invoice not fully paid (and not cancelled). */
+export type UnpaidInvoice = {
+  invoice_id: number;
+  number: string;
+  issued_on: string;
+  patient_id: number;
+  patient_name: string;
+  amount_cents: number;
+  remaining_cents: number;
+  /** Days since the invoice was issued. */
+  age_days: number;
+};
+
+export type Unpaid = { invoices: UnpaidInvoice[]; total_cents: number };
+
+export const unpaidApi = {
+  list: () => invoke<Unpaid>("list_unpaid_invoices"),
+};
