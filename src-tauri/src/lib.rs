@@ -2,6 +2,7 @@ pub mod attachments;
 pub mod backup;
 pub mod db;
 pub mod expenses;
+pub mod fixed_assets;
 pub mod invoices;
 pub mod patients;
 pub mod payments;
@@ -116,6 +117,11 @@ pub fn run() {
             expenses::archive_recurring_expense,
             expenses::due_recurring_expenses,
             expenses::skip_recurring_expense,
+            fixed_assets::get_fixed_asset_register,
+            fixed_assets::get_fixed_asset_schedule,
+            fixed_assets::create_fixed_asset,
+            fixed_assets::update_fixed_asset,
+            fixed_assets::delete_fixed_asset,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

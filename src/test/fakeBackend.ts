@@ -13,6 +13,7 @@ import type { Session } from "../patients/sessionsApi";
 import type { InvoiceView } from "../invoices/api";
 import type { Payment } from "../invoices/paymentsApi";
 import type { Category, Due, Expense, Recurring } from "../expenses/api";
+import type { Annuity, AssetYear } from "../fixedAssets/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -61,7 +62,15 @@ export function fakeBackend(initial: LockStatus) {
     nextExpenseId: 1,
     recurring: [] as Recurring[],
     due: [] as Due[],
+    /** Fake rule: the register shows every asset, with a fifth of its cost. */
+    assets: [] as AssetYear[],
+    schedule: [] as Annuity[],
   };
+  const assetYear = (a: AssetYear) => ({
+    ...a,
+    annuity_cents: a.cost_cents / a.duration_years,
+    net_cents: a.cost_cents - a.cost_cents / a.duration_years,
+  });
   const receiptOf = (path: string) => ({
     file_name: path.split("/").pop()!,
     mime: "application/pdf",
@@ -447,6 +456,29 @@ export function fakeBackend(initial: LockStatus) {
         return state.due;
       case "skip_recurring_expense":
         dropDue(a.recurringId, a.month);
+        return;
+      case "get_fixed_asset_register": {
+        const assets = state.assets
+          .filter((x) => x.acquired_on <= `${a.year}-12-31`)
+          .map(assetYear);
+        const total_cents = assets.reduce((t, x) => t + x.annuity_cents, 0);
+        return { year: a.year, assets, total_cents };
+      }
+      case "get_fixed_asset_schedule":
+        return state.schedule;
+      case "create_fixed_asset": {
+        if (!a.asset.label.trim()) throw { code: "invalid_label" };
+        const x = { ...a.asset, id: state.assets.length + 1 };
+        state.assets.push(assetYear(x));
+        return x;
+      }
+      case "update_fixed_asset": {
+        const i = state.assets.findIndex((x) => x.id === a.id);
+        state.assets[i] = assetYear({ ...state.assets[i], ...a.asset });
+        return state.assets[i];
+      }
+      case "delete_fixed_asset":
+        state.assets = state.assets.filter((x) => x.id !== a.id);
         return;
       case "delete_attachment":
         state.attachments = state.attachments.filter((x) => x.id !== a.id);

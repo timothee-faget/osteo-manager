@@ -284,6 +284,19 @@ pub const MIGRATIONS: &[&str] = &[
         month TEXT NOT NULL,
         PRIMARY KEY (recurring_id, month)
     ) STRICT;",
+    // v9: fixed assets register, depreciated on a straight line from `acquired_on`.
+    "CREATE TABLE fixed_asset (
+        id INTEGER PRIMARY KEY,
+        label TEXT NOT NULL,
+        acquired_on TEXT NOT NULL,
+        cost_cents INTEGER NOT NULL CHECK (cost_cents > 0),
+        duration_years INTEGER NOT NULL CHECK (duration_years BETWEEN 1 AND 50),
+        disposed_on TEXT,
+        disposal_price_cents INTEGER CHECK (disposal_price_cents >= 0),
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    ) STRICT;",
 ];
 
 #[derive(Debug, thiserror::Error)]
