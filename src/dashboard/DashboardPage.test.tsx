@@ -30,7 +30,7 @@ const period = (from: string, receipts_cents: number): Period => ({
   urssaf_provision_cents: 2860,
 });
 
-test("chiffres clés, comparaison N-1, à traiter et répartition par lieu", async () => {
+test("bilan résumé, à traiter et détail dans Comptabilité", async () => {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   state.dashboard = {
@@ -54,6 +54,41 @@ test("chiffres clés, comparaison N-1, à traiter et répartition par lieu", asy
   };
   render(<App />);
 
+  const card = (title: string) =>
+    within(screen.getByText(title).parentElement!);
+  await screen.findByText("CA encaissé en octobre 2026");
+  expect(
+    card("CA encaissé en octobre 2026").getByText("+100 % vs 2025"),
+  ).toBeInTheDocument();
+  expect(
+    card("CA encaissé depuis le 1er janvier").getByText(/^1.800,00 €$/),
+  ).toBeInTheDocument();
+  expect(
+    card("Résultat estimé depuis le 1er janvier").getByText(/^1.740,00 €$/),
+  ).toBeInTheDocument();
+  expect(
+    card("Provisions impôt + URSSAF").getByText("55,60 €"),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByRole("button", { name: "✓ Toutes les factures sont envoyées" }),
+  ).toBeDisabled();
+  await user.click(
+    screen.getByRole("button", { name: "Impayés : 2 factures, 100,00 €" }),
+  );
+  await user.click(
+    screen.getByRole("button", {
+      name: "Détail des impayés dans Encaissements →",
+    }),
+  );
+  expect(
+    await screen.findByRole("heading", { name: "Encaissements" }),
+  ).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Accueil" }));
+  await user.click(
+    await screen.findByRole("button", { name: "Détail dans Comptabilité →" }),
+  );
   const figures = within(
     await screen.findByRole("table", { name: "Chiffres clés" }),
   );
@@ -75,48 +110,27 @@ test("chiffres clés, comparaison N-1, à traiter et répartition par lieu", asy
       .getAllByRole("cell")
       .map((c) => c.textContent),
   ).toEqual(["120,00 €", "60,00 €", "1\u202f800,00 €", "1\u202f200,00 €"]);
-  expect(
-    within(
-      figures.getByRole("rowheader", { name: "Provision URSSAF" })
-        .parentElement!,
-    ).getAllByText("28,60 €"),
-  ).toHaveLength(4);
-
   const locations = within(screen.getByRole("table", { name: "CA par lieu" }));
   const cabinet = locations.getByRole("rowheader", {
     name: "Cabinet",
   }).parentElement!;
   expect(within(cabinet).getByText("75 %")).toBeInTheDocument();
-
-  await user.click(
-    screen.getByRole("button", { name: "Impayés : 2 factures, 100,00 €" }),
-  );
-  expect(
-    await screen.findByRole("heading", { name: "Encaissements" }),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Encaissements" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
 });
 
-test("tableau de bord vide", async () => {
+test("accueil vide", async () => {
   fakeBackend("unlocked");
   render(<App />);
   expect(
-    await screen.findByText("Aucun encaissement cette année."),
+    await screen.findByText("Aucune séance pour l'instant."),
   ).toBeInTheDocument();
-  expect(
-    screen.getByRole("button", {
-      name: "Chèques à remettre : 0 chèque, 0,00 €",
-    }),
-  ).toBeInTheDocument();
-  await userEvent.click(
-    screen.getByRole("button", {
-      name: "Séances non facturées : 0 séance, 0,00 €",
-    }),
-  );
-  expect(screen.getByText("Aucune séance non facturée.")).toBeInTheDocument();
+  for (const name of [
+    "✓ Toutes les séances sont facturées",
+    "✓ Toutes les factures sont envoyées",
+    "✓ Aucun impayé",
+    "✓ Aucun chèque à remettre",
+  ])
+    expect(screen.getByRole("button", { name })).toBeDisabled();
+  expect(screen.queryByText(/vs 2025/)).not.toBeInTheDocument();
 });
 
 /** A fictitious draft session of patient 1. */
@@ -143,6 +157,14 @@ async function withDrafts() {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   state.practitioner.last_name = "Martin";
+  state.locations.push({
+    id: 1,
+    name: "Cabinet",
+    kind: "practice",
+    address: "2 place du Marché",
+    retrocession_rate_bp: 0,
+    archived: false,
+  });
   state.patients = [
     {
       ...EMPTY_PATIENT,
@@ -199,10 +221,75 @@ test("une erreur de validation s'affiche", async () => {
   expect(state.sessions[0].validated_at).toBeNull();
 });
 
-test("« Fiche patient » ouvre le dossier du patient", async () => {
+test("« Ouvrir » ouvre la séance dans la fiche du patient", async () => {
   const { user } = await withDrafts();
-  await user.click(screen.getAllByRole("button", { name: "Fiche patient" })[0]);
+  await user.click(screen.getAllByRole("button", { name: "Ouvrir" })[0]);
   expect(
     await screen.findByRole("heading", { name: "DUPONT Anne" }),
   ).toBeInTheDocument();
+  expect(await screen.findByLabelText("Motif")).toHaveValue("Lombalgie");
+  expect(screen.getByLabelText("Date et heure")).toHaveValue(
+    "2026-10-14T09:00",
+  );
+});
+
+test("dernières séances avec leur statut", async () => {
+  const { user, state } = await withDrafts();
+  const recent = () =>
+    within(screen.getByRole("table", { name: "Dernières séances" }));
+  // Newest first.
+  const rows = recent().getAllByRole("row").slice(1);
+  expect(
+    rows.map((r) => within(r).getAllByRole("cell")[0].textContent),
+  ).toEqual(["15/10/2026 à 11:30", "14/10/2026 à 09:00"]);
+  expect(recent().getAllByText("Non facturée")).toHaveLength(2);
+
+  await user.click(screen.getAllByRole("button", { name: "Valider" })[0]);
+  await user.click(
+    screen.getByRole("button", { name: "Confirmer et émettre la facture" }),
+  );
+  expect(await recent().findByText("Facturée")).toBeInTheDocument();
+  state.invoices[0].sent_at = "2026-10-16T18:00:00";
+  await user.click(screen.getByRole("button", { name: "Patients" }));
+  await user.click(screen.getByRole("button", { name: "Accueil" }));
+  expect(await recent().findByText("Envoyée")).toBeInTheDocument();
+});
+
+test("recherche : « + Séance » et Entrée ouvrent la fiche avec une nouvelle séance", async () => {
+  const { user } = await withDrafts();
+  await user.type(screen.getByLabelText("Rechercher un patient"), "dup");
+  const found = within(
+    await screen.findByRole("list", { name: "Patients trouvés" }),
+  );
+  await user.click(found.getByRole("button", { name: "+ Séance" }));
+  expect(
+    await screen.findByRole("heading", { name: "DUPONT Anne" }),
+  ).toBeInTheDocument();
+  expect(await screen.findByLabelText("Motif")).toHaveValue("");
+
+  await user.click(screen.getByRole("button", { name: "Accueil" }));
+  await user.type(await screen.findByLabelText("Rechercher un patient"), "dup");
+  await screen.findByRole("button", { name: "+ Séance" });
+  await user.keyboard("{Enter}");
+  expect(await screen.findByLabelText("Motif")).toHaveValue("");
+});
+
+test("recherche : créer le patient tapé, puis sa séance", async () => {
+  const { user } = await withDrafts();
+  await user.type(
+    screen.getByLabelText("Rechercher un patient"),
+    "Durand Marie",
+  );
+  await user.click(
+    await screen.findByRole("button", {
+      name: "+ Créer le patient « Durand Marie »",
+    }),
+  );
+  expect(screen.getByLabelText("Nom")).toHaveValue("Durand");
+  expect(screen.getByLabelText("Prénom")).toHaveValue("Marie");
+  await user.click(screen.getByRole("button", { name: "Créer la fiche" }));
+  expect(
+    await screen.findByRole("heading", { name: "DURAND Marie" }),
+  ).toBeInTheDocument();
+  expect(await screen.findByLabelText("Motif")).toBeInTheDocument();
 });

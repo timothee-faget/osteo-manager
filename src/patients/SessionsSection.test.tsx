@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import App from "../App";
+import { EMPTY_PATIENT } from "./api";
 import { fakeBackend } from "../test/fakeBackend";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -46,14 +47,18 @@ async function setup(configure: (s: State) => void = withPractice) {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   configure(state);
+  state.patients.push({
+    ...EMPTY_PATIENT,
+    id: 1,
+    last_name: "Dupont",
+    first_name: "Anne",
+    is_minor: false,
+    created_at: "2026-10-16T10:00:00",
+    updated_at: "2026-10-16T10:00:00",
+  });
   render(<App />);
   await user.click(await screen.findByRole("button", { name: "Patients" }));
-  await user.click(
-    await screen.findByRole("button", { name: "Nouveau patient" }),
-  );
-  await user.type(screen.getByLabelText("Nom"), "Dupont");
-  await user.type(screen.getByLabelText("Prénom"), "Anne");
-  await user.click(screen.getByRole("button", { name: "Créer la fiche" }));
+  await user.click(await screen.findByRole("button", { name: "DUPONT Anne" }));
   const heading = await screen.findByRole("heading", { name: "Séances" });
   const s = within(heading.closest("section")!);
   return { user, state, s };
@@ -68,6 +73,22 @@ async function newSession(
   const field = await s.findByLabelText("Motif");
   await user.type(field, reason);
 }
+
+test("créer une fiche enchaîne sur sa première séance", async () => {
+  const user = userEvent.setup();
+  withPractice(fakeBackend("unlocked"));
+  render(<App />);
+  await user.click(await screen.findByRole("button", { name: "Patients" }));
+  await user.click(
+    await screen.findByRole("button", { name: "Nouveau patient" }),
+  );
+  await user.type(screen.getByLabelText("Nom"), "Dupont");
+  await user.click(screen.getByRole("button", { name: "Créer la fiche" }));
+  expect(await screen.findByLabelText("Motif")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Nouvelle séance" }),
+  ).not.toBeInTheDocument();
+});
 
 test("sans lieu d'exercice, invite à en créer un", async () => {
   const { user, s } = await setup(() => {});
