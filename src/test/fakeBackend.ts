@@ -12,6 +12,7 @@ import type { Attachment } from "../patients/attachmentsApi";
 import type { Session } from "../patients/sessionsApi";
 import type { InvoiceView } from "../invoices/api";
 import type { Payment } from "../invoices/paymentsApi";
+import type { Category, Due, Expense, Recurring } from "../expenses/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -51,6 +52,26 @@ export function fakeBackend(initial: LockStatus) {
     invoices: [] as InvoiceView[],
     creditSeq: 0,
     payments: [] as Payment[],
+    categories: [
+      { code: "purchases", line: 8, label: "Achats" },
+      { code: "rent", line: 15, label: "Loyers et charges locatives" },
+      { code: "office", line: 27, label: "Fournitures de bureau" },
+    ] as Category[],
+    expenses: [] as Expense[],
+    nextExpenseId: 1,
+    recurring: [] as Recurring[],
+    due: [] as Due[],
+  };
+  const receiptOf = (path: string) => ({
+    file_name: path.split("/").pop()!,
+    mime: "application/pdf",
+    size: 4,
+  });
+  const expense = (id: number) => state.expenses.find((e) => e.id === id)!;
+  const dropDue = (recurringId: number, month: string) => {
+    state.due = state.due.filter(
+      (d) => d.recurring_id !== recurringId || d.month !== month,
+    );
   };
   const paidOf = (id: number) =>
     state.payments
@@ -368,6 +389,65 @@ export function fakeBackend(initial: LockStatus) {
         };
         return i;
       }
+      case "list_expense_categories":
+        return state.categories;
+      case "list_expenses":
+        return state.expenses
+          .filter((e) => e.paid_on.startsWith(String(a.year)))
+          .sort((x, y) => y.paid_on.localeCompare(x.paid_on) || y.id - x.id);
+      case "create_expense": {
+        if (!a.expense.supplier.trim()) throw { code: "invalid_supplier" };
+        const e: Expense = {
+          ...a.expense,
+          id: state.nextExpenseId++,
+          recurring_id: a.occurrence?.recurring_id ?? null,
+          recurring_month: a.occurrence?.month ?? null,
+          receipt: a.receipt ? receiptOf(a.receipt) : null,
+        };
+        state.expenses.push(e);
+        if (a.occurrence)
+          dropDue(a.occurrence.recurring_id, a.occurrence.month);
+        return e;
+      }
+      case "update_expense":
+        Object.assign(expense(a.id), a.expense);
+        return expense(a.id);
+      case "delete_expense":
+        state.expenses = state.expenses.filter((e) => e.id !== a.id);
+        return;
+      case "set_expense_receipt":
+        expense(a.id).receipt = receiptOf(a.path);
+        return expense(a.id);
+      case "remove_expense_receipt":
+        expense(a.id).receipt = null;
+        return expense(a.id);
+      case "read_expense_receipt":
+        return new Uint8Array([37, 80, 68, 70]).buffer;
+      case "list_recurring_expenses":
+        return state.recurring.filter((r) => !r.archived);
+      case "create_recurring_expense": {
+        if (!a.recurring.label.trim()) throw { code: "invalid_label" };
+        const r = {
+          ...a.recurring,
+          id: state.recurring.length + 1,
+          archived: false,
+        };
+        state.recurring.push(r);
+        return r;
+      }
+      case "update_recurring_expense": {
+        const r = state.recurring.find((x) => x.id === a.id)!;
+        Object.assign(r, a.recurring);
+        return r;
+      }
+      case "archive_recurring_expense":
+        state.recurring.find((x) => x.id === a.id)!.archived = true;
+        return;
+      case "due_recurring_expenses":
+        return state.due;
+      case "skip_recurring_expense":
+        dropDue(a.recurringId, a.month);
+        return;
       case "delete_attachment":
         state.attachments = state.attachments.filter((x) => x.id !== a.id);
         return;

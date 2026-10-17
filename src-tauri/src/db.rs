@@ -243,6 +243,47 @@ pub const MIGRATIONS: &[&str] = &[
     ) STRICT;
     CREATE INDEX payment_invoice ON payment (invoice_id);
     CREATE INDEX payment_received_on ON payment (received_on);",
+    // v8: expenses, with an optional encrypted receipt, and monthly recurring expenses.
+    // Cash basis: an expense counts on `paid_on`. A recurring expense suggests one expense
+    // per month, which is confirmed (an `expense` row linked to it) or skipped.
+    "CREATE TABLE recurring_expense (
+        id INTEGER PRIMARY KEY,
+        label TEXT NOT NULL,
+        supplier TEXT NOT NULL DEFAULT '',
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        method TEXT NOT NULL,
+        category TEXT NOT NULL,
+        day_of_month INTEGER NOT NULL CHECK (day_of_month BETWEEN 1 AND 31),
+        start_month TEXT NOT NULL,
+        archived INTEGER NOT NULL DEFAULT 0
+    ) STRICT;
+    CREATE TABLE expense (
+        id INTEGER PRIMARY KEY,
+        paid_on TEXT NOT NULL,
+        supplier TEXT NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        method TEXT NOT NULL
+            CHECK (method IN ('card', 'direct_debit', 'transfer', 'cheque', 'cash')),
+        category TEXT NOT NULL,
+        recurring_id INTEGER REFERENCES recurring_expense (id),
+        recurring_month TEXT,
+        receipt_name TEXT,
+        receipt_mime TEXT,
+        receipt_size INTEGER,
+        receipt_storage TEXT,
+        receipt_key BLOB,
+        receipt_nonce BLOB,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (recurring_id, recurring_month)
+    ) STRICT;
+    CREATE INDEX expense_paid_on ON expense (paid_on);
+    CREATE TABLE recurring_expense_skip (
+        recurring_id INTEGER NOT NULL REFERENCES recurring_expense (id),
+        month TEXT NOT NULL,
+        PRIMARY KEY (recurring_id, month)
+    ) STRICT;",
 ];
 
 #[derive(Debug, thiserror::Error)]
