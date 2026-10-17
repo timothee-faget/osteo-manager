@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AccountingPage } from "./accounting/AccountingPage";
+import { DashboardPage } from "./dashboard/DashboardPage";
 import { CollectionsPage } from "./collections/CollectionsPage";
 import { ExpensesPage } from "./expenses/ExpensesPage";
 import { FixedAssetsPage } from "./fixedAssets/FixedAssetsPage";
@@ -94,7 +95,7 @@ function Home({
       </header>
       <main className="container">
         {page === "home" && (
-          <p>Le tableau de bord arrivera avec la comptabilité.</p>
+          <DashboardPage onOpenCollections={() => go("collections")} />
         )}
         {page === "patients" && (
           <PatientsPage key={target?.seq} openPatientId={target?.id} />

@@ -22,6 +22,7 @@ import type {
 import type { Annuity, AssetYear } from "../fixedAssets/api";
 import type { Cheque, Deposit } from "../collections/api";
 import type { Journal, Summary } from "../accounting/api";
+import type { Dashboard, Period } from "../dashboard/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -80,7 +81,20 @@ export function fakeBackend(initial: LockStatus) {
     /** Returned as is, whatever the year. */
     journal: null as Journal | null,
     summary: null as Summary | null,
+    dashboard: null as Dashboard | null,
   };
+  const emptyPeriod = (from: string, to: string): Period => ({
+    from,
+    to,
+    receipts_cents: 0,
+    sessions: 0,
+    average_cents: 0,
+    expenses_cents: 0,
+    retrocessions_cents: 0,
+    result_cents: 0,
+    tax_provision_cents: 0,
+    urssaf_provision_cents: 0,
+  });
   const strip = (c: (typeof state.cheques)[number]): Cheque => ({
     payment_id: c.payment_id,
     received_on: c.received_on,
@@ -531,6 +545,20 @@ export function fakeBackend(initial: LockStatus) {
       case "delete_fixed_asset":
         state.assets = state.assets.filter((x) => x.id !== a.id);
         return;
+      case "get_dashboard":
+        return (
+          state.dashboard ?? {
+            month: emptyPeriod("2026-10-01", "2026-10-17"),
+            month_last_year: emptyPeriod("2025-10-01", "2025-10-17"),
+            year_to_date: emptyPeriod("2026-01-01", "2026-10-17"),
+            year_to_date_last_year: emptyPeriod("2025-01-01", "2025-10-17"),
+            by_location: [],
+            unpaid_count: 0,
+            unpaid_cents: 0,
+            cheques_to_deposit: 0,
+            cheques_to_deposit_cents: 0,
+          }
+        );
       case "get_journal":
         return (
           state.journal ?? {

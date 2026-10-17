@@ -2,6 +2,7 @@ pub mod accounting;
 pub mod attachments;
 pub mod backup;
 pub mod cheque_deposits;
+pub mod dashboard;
 pub mod db;
 pub mod expenses;
 pub mod fixed_assets;
@@ -138,6 +139,7 @@ pub fn run() {
             accounting::export_accounting,
             retrocessions::list_retrocessions,
             retrocessions::pay_retrocession,
+            dashboard::get_dashboard,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
