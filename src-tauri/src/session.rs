@@ -59,6 +59,9 @@ pub enum SessionError {
     /// A form field failed validation; the front highlights it.
     #[error("invalid {0}")]
     Invalid(&'static str),
+    /// Sending mail failed: `not_configured`, `auth`, `connection`, `rejected`, `keychain`…
+    #[error("mail: {0}")]
+    Mail(&'static str),
 }
 
 /// Sent to the front as `{ code, message }`; the front maps `code` to a French message.
@@ -76,6 +79,7 @@ impl Serialize for SessionError {
             Self::FolderNotFound => "folder_not_found".into(),
             Self::Backup(_) | Self::Io(_) => "backup_failed".into(),
             Self::Invalid(field) => format!("invalid_{field}").into(),
+            Self::Mail(kind) => format!("mail_{kind}").into(),
             _ => "internal".into(),
         };
         let mut st = s.serialize_struct("SessionError", 2)?;

@@ -313,6 +313,32 @@ pub const MIGRATIONS: &[&str] = &[
         expense_id INTEGER NOT NULL UNIQUE REFERENCES expense (id) ON DELETE CASCADE,
         PRIMARY KEY (location_id, month)
     ) STRICT;",
+    // v12: outgoing mail server (the password is in the system keychain) and mail
+    // templates, with `{placeholders}` filled in at sending.
+    "CREATE TABLE mail_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        host TEXT NOT NULL DEFAULT '',
+        port INTEGER NOT NULL DEFAULT 587,
+        security TEXT NOT NULL DEFAULT 'starttls',
+        username TEXT NOT NULL DEFAULT '',
+        from_email TEXT NOT NULL DEFAULT '',
+        from_name TEXT NOT NULL DEFAULT '',
+        password_saved INTEGER NOT NULL DEFAULT 0
+    ) STRICT;
+    INSERT INTO mail_settings (id) VALUES (1);
+    CREATE TABLE mail_template (
+        kind TEXT PRIMARY KEY,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL
+    ) STRICT;
+    INSERT INTO mail_template (kind, subject, body) VALUES ('invoice',
+        'Facture {numero}',
+        'Bonjour,
+
+Veuillez trouver ci-joint la facture {numero} de votre consultation du {date}, d''un montant de {montant}.
+
+Bien cordialement,
+{praticienne}');",
 ];
 
 #[derive(Debug, thiserror::Error)]

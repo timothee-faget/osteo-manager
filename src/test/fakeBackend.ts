@@ -23,6 +23,7 @@ import type { Annuity, AssetYear } from "../fixedAssets/api";
 import type { Cheque, Deposit } from "../collections/api";
 import type { Journal, Summary } from "../accounting/api";
 import type { Dashboard, Period } from "../dashboard/api";
+import type { Draft, MailSettings, Template } from "../mail/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -82,6 +83,28 @@ export function fakeBackend(initial: LockStatus) {
     journal: null as Journal | null,
     summary: null as Summary | null,
     dashboard: null as Dashboard | null,
+    mail: {
+      host: "",
+      port: 587,
+      security: "starttls",
+      username: "",
+      from_email: "",
+      from_name: "",
+      password_saved: false,
+    } as MailSettings,
+    /** Stands in for the keychain. */
+    smtpPassword: null as string | null,
+    invoiceTemplate: {
+      subject: "Facture {numero}",
+      body: "Bonjour,\n\nVeuillez trouver ci-joint la facture {numero}.",
+    } as Template,
+    sentMails: [] as (Draft & { invoiceId: number | null })[],
+  };
+  const mailReady = () => {
+    if (!state.mail.host || !state.mail.from_email)
+      throw { code: "mail_not_configured" };
+    if (!state.smtpPassword) throw { code: "mail_no_password" };
+    if (state.smtpPassword !== "secret") throw { code: "mail_auth" };
   };
   const emptyPeriod = (from: string, to: string): Period => ({
     from,
@@ -420,6 +443,49 @@ export function fakeBackend(initial: LockStatus) {
       case "set_invoice_sent": {
         const i = state.invoices.find((x) => x.id === a.id)!;
         i.sent_at = a.sent ? "2026-10-16T18:00:00" : null;
+        return i;
+      }
+      case "get_mail_settings":
+        return state.mail;
+      case "update_mail_settings":
+        if (a.settings.port <= 0) throw { code: "invalid_smtp_port" };
+        if (a.password) state.smtpPassword = a.password;
+        state.mail = {
+          ...a.settings,
+          host: a.settings.host.trim(),
+          password_saved: state.smtpPassword !== null,
+        };
+        return state.mail;
+      case "test_mail_settings":
+        mailReady();
+        state.sentMails.push({
+          to: state.mail.from_email,
+          subject: "Test",
+          body: "",
+          invoiceId: null,
+        });
+        return;
+      case "get_mail_template":
+        return state.invoiceTemplate;
+      case "update_mail_template":
+        if (!a.template.subject.trim()) throw { code: "invalid_subject" };
+        state.invoiceTemplate = a.template;
+        return state.invoiceTemplate;
+      case "get_invoice_email": {
+        const i = state.invoices.find((x) => x.id === a.id)!;
+        if (i.credit_note) throw { code: "invalid_invoice_cancelled" };
+        const fill = (t: string) => t.split("{numero}").join(i.number);
+        return {
+          to: state.patients.find((p) => p.id === i.patient_id)?.email ?? "",
+          subject: fill(state.invoiceTemplate.subject),
+          body: fill(state.invoiceTemplate.body),
+        };
+      }
+      case "send_invoice_email": {
+        mailReady();
+        const i = state.invoices.find((x) => x.id === a.id)!;
+        state.sentMails.push({ ...a.draft, invoiceId: i.id });
+        i.sent_at = "2026-10-16T18:00:00";
         return i;
       }
       case "cancel_invoice": {

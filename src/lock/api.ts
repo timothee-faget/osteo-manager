@@ -88,6 +88,22 @@ const MESSAGES: Record<string, string> = {
   invalid_month: "Mois invalide.",
   invalid_retrocession_paid: "La rétrocession de ce mois est déjà enregistrée.",
   invalid_recurring_month: "Ce mois est déjà enregistré ou ignoré.",
+  invalid_smtp_host: "Serveur SMTP invalide.",
+  invalid_smtp_port: "Port invalide, par exemple 587.",
+  invalid_from_email: "Adresse d'expédition invalide.",
+  invalid_subject: "L'objet est obligatoire.",
+  invalid_to: "Adresse du destinataire invalide.",
+  mail_not_configured:
+    "Renseignez d'abord le serveur SMTP et l'adresse d'expédition dans Paramètres.",
+  mail_no_password:
+    "Aucun mot de passe SMTP enregistré : saisissez-le dans Paramètres.",
+  mail_keychain: "Le trousseau de macOS n'a pas pu être lu ou modifié.",
+  mail_auth:
+    "Le serveur a refusé l'identifiant ou le mot de passe. Pour Gmail, utilisez un mot de passe d'application.",
+  mail_connection:
+    "Connexion au serveur SMTP impossible : vérifiez le serveur, le port, la sécurité et la connexion internet.",
+  mail_rejected:
+    "Le serveur a refusé le message : vérifiez l'adresse du destinataire.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */

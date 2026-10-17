@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "../lock/api";
 import { formatEuros } from "../money";
+import { InvoiceEmail } from "../mail/InvoiceEmail";
+import { mailApi } from "../mail/api";
 import { formatDate } from "../patients/api";
 import { invoicesApi, type InvoiceView } from "./api";
 import { PaymentPanel } from "./PaymentPanel";
@@ -99,6 +101,7 @@ function InvoiceDetail({
 }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{
@@ -176,6 +179,11 @@ function InvoiceDetail({
         >
           Enregistrer le PDF…
         </button>
+        {!cn && !emailing && (
+          <button type="button" onClick={() => setEmailing(true)}>
+            Envoyer par e-mail…
+          </button>
+        )}
         <button
           type="button"
           disabled={busy}
@@ -228,6 +236,21 @@ function InvoiceDetail({
           )
         )}
       </div>
+      {emailing && !cn && (
+        <InvoiceEmail
+          invoiceId={invoice.id}
+          busy={busy}
+          onCancel={() => setEmailing(false)}
+          onSend={(draft) =>
+            void run(async () => {
+              await mailApi.sendInvoice(invoice.id, draft);
+              setEmailing(false);
+              onChange();
+              return `Facture envoyée à ${draft.to.trim()}.`;
+            })
+          }
+        />
+      )}
       {cancelling && !cn && (
         <div className="confirm">
           <label>
