@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import type { PaymentStatus } from "./paymentsApi";
 
 export type CreditNote = {
@@ -58,6 +58,19 @@ export const invoicesApi = {
     savePdf("save_credit_note_pdf", c.id, `Avoir ${c.number}.pdf`),
   cancel: (id: number, reason: string) =>
     invoke<InvoiceView>("cancel_invoice", { id, reason }),
+  /**
+   * Asks for a folder and writes one PDF per invoice into it (with the credit note of
+   * a cancelled one). Returns the folder and the number of files, or `null` if cancelled.
+   */
+  exportPdfs: async (ids: number[]) => {
+    const folder = await open({
+      title: "Exporter les factures dans…",
+      directory: true,
+    });
+    if (!folder) return null;
+    const count = await invoke<number>("export_invoice_pdfs", { ids, folder });
+    return { folder, count };
+  },
   setSent: (id: number, sent: boolean) =>
     invoke<InvoiceView>("set_invoice_sent", { id, sent }),
 };

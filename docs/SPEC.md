@@ -60,6 +60,7 @@ Calquées sur ses fiches Word actuelles (voir [legacy-data.md](legacy-data.md)) 
 - Une facture émise ne peut plus être modifiée ni supprimée ; on l'annule ou on la corrige par un **avoir**.
 - Statut d'envoi : non envoyée / envoyée (avec la date).
 - Statut de paiement : impayée / partiellement payée / payée.
+- **Export PDF par lot** : la liste se filtre par période d'émission, statut de paiement et lieu ; l'export écrit un PDF par facture affichée dans un dossier choisi (avec l'avoir des factures annulées).
 
 ### 3.5 Encaissements
 

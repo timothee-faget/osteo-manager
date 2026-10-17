@@ -103,6 +103,7 @@ pub fn run() {
             invoices::save_invoice_pdf,
             invoices::get_credit_note_pdf,
             invoices::save_credit_note_pdf,
+            invoices::export_invoice_pdfs,
             invoices::cancel_invoice,
             invoices::set_invoice_sent,
             mail::get_mail_settings,

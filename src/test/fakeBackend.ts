@@ -477,6 +477,11 @@ export function fakeBackend(initial: LockStatus) {
       case "save_invoice_pdf":
       case "save_credit_note_pdf":
         return;
+      case "export_invoice_pdfs":
+        return (a.ids as number[]).reduce((n, id) => {
+          const i = state.invoices.find((x) => x.id === id)!;
+          return n + (i.credit_note ? 2 : 1);
+        }, 0);
       case "set_invoice_sent": {
         const i = state.invoices.find((x) => x.id === a.id)!;
         i.sent_at = a.sent ? "2026-10-16T18:00:00" : null;
