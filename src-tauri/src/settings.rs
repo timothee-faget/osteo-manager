@@ -129,8 +129,11 @@ pub fn save_practitioner(conn: &Connection, p: &Practitioner) -> Result<Practiti
     if !p.adeli.is_empty() && !adeli_ok {
         return Err(SessionError::Invalid("adeli"));
     }
-    if !p.siret.is_empty() && !is_valid_siret(&p.siret) {
+    if !p.siret.is_empty() && !is_digits(&p.siret, 14) {
         return Err(SessionError::Invalid("siret"));
+    }
+    if !p.siret.is_empty() && !is_valid_siret(&p.siret) {
+        return Err(SessionError::Invalid("siret_checksum"));
     }
     if !p.email.is_empty() && !is_plausible_email(&p.email) {
         return Err(SessionError::Invalid("email"));
@@ -336,8 +339,17 @@ pub fn save_billing_settings(conn: &Connection, b: &BillingSettings) -> Result<(
 
 // --- Validation helpers ---
 
+/// Drops spaces, the usual separators and the invisible characters a copy-paste can bring.
 fn compact(s: &str) -> String {
-    s.chars().filter(|c| !c.is_whitespace()).collect()
+    s.chars()
+        .filter(|c| {
+            !c.is_whitespace()
+                && !matches!(
+                    c,
+                    '.' | '-' | '\u{200B}'..='\u{200D}' | '\u{2060}' | '\u{FEFF}'
+                )
+        })
+        .collect()
 }
 
 fn is_digits(s: &str, len: usize) -> bool {
@@ -499,7 +511,10 @@ mod tests {
         let cases: [(Practitioner, &str); 5] = [
             (with(|p| p.rpps = "1234".into()), "rpps"),
             (with(|p| p.adeli = "12345".into()), "adeli"),
-            (with(|p| p.siret = "12345678900016".into()), "siret"),
+            (
+                with(|p| p.siret = "12345678900016".into()),
+                "siret_checksum",
+            ),
             (with(|p| p.siret = "1234567890001".into()), "siret"),
             (with(|p| p.email = "claire.example.org".into()), "email"),
         ];
@@ -508,6 +523,19 @@ mod tests {
         }
         // Nothing was written.
         assert_eq!(practitioner(&c).unwrap(), Practitioner::default());
+    }
+
+    #[test]
+    fn identifiers_ignore_separators_and_invisible_characters() {
+        let (_dir, c) = conn();
+        let mut p = practitioner_fixture();
+        p.siret = "123.456.789-00015\u{200B}\u{a0}".into();
+        p.rpps = "\u{FEFF}100 0000 0009".into();
+        let saved = save_practitioner(&c, &p).unwrap();
+        assert_eq!(
+            (saved.siret.as_str(), saved.rpps.as_str()),
+            ("12345678900015", "10000000009")
+        );
     }
 
     #[test]

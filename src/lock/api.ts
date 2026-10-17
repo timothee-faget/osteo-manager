@@ -18,6 +18,8 @@ const MESSAGES: Record<string, string> = {
   invalid_rpps: "Le numéro RPPS doit comporter 11 chiffres.",
   invalid_adeli: "Le numéro ADELI doit comporter 9 caractères.",
   invalid_siret: "Numéro SIRET invalide : 14 chiffres attendus.",
+  invalid_siret_checksum:
+    "Ce numéro SIRET n'est pas valide (clé de contrôle) : vérifiez chaque chiffre, par exemple sur annuaire-entreprises.data.gouv.fr.",
   invalid_email: "Adresse e-mail invalide.",
   invalid_logo: "Le logo doit être une image PNG ou JPEG de 1 Mo maximum.",
   invalid_name: "Le nom est obligatoire.",
