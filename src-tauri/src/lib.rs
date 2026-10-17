@@ -112,6 +112,8 @@ pub fn run() {
             mail::update_mail_template,
             mail::get_invoice_email,
             mail::send_invoice_email,
+            mail::list_unsent_invoice_emails,
+            mail::send_invoice_emails,
             payments::list_payments,
             payments::add_payment,
             payments::delete_payment,

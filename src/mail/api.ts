@@ -40,3 +40,20 @@ export const mailApi = {
   sendInvoice: (id: number, draft: Draft) =>
     invoke<InvoiceView>("send_invoice_email", { id, draft }),
 };
+
+export type Unsent = { invoice: InvoiceView; draft: Draft };
+
+export type BatchItem = { invoice_id: number; draft: Draft };
+
+/** `error` is null once sent. */
+export type BatchResult = {
+  invoice_id: number;
+  number: string;
+  error: { code: string; message: string } | null;
+};
+
+export const batchApi = {
+  unsent: () => invoke<Unsent[]>("list_unsent_invoice_emails"),
+  send: (items: BatchItem[]) =>
+    invoke<BatchResult[]>("send_invoice_emails", { items }),
+};

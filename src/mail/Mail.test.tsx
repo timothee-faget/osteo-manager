@@ -202,3 +202,97 @@ test("envoi impossible sans configuration SMTP", async () => {
   expect(d.getByRole("form", { name: "E-mail de la facture" })).toBeVisible();
   expect(state.invoices[0].sent_at).toBeNull();
 });
+
+test("envoi groupé des factures non envoyées, avec rapport d'erreurs", async () => {
+  const user = userEvent.setup();
+  const state = fakeBackend("unlocked");
+  state.mail = {
+    ...state.mail,
+    host: "smtp.example.org",
+    from_email: "c@example.org",
+  };
+  state.smtpPassword = "secret";
+  const invoice = (id: number, sent: boolean): InvoiceView => ({
+    ...INVOICE,
+    id,
+    number: `2026-10-00${id}`,
+    sent_at: sent ? "2026-10-16T18:00:00" : null,
+  });
+  // Newest first, as listed.
+  state.invoices = [invoice(3, false), invoice(2, true), invoice(1, false)];
+  render(<App />);
+  await user.click(await screen.findByRole("button", { name: "Factures" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Envoyer les factures non envoyées…",
+    }),
+  );
+  const table = within(
+    await screen.findByRole("table", { name: "Factures à envoyer" }),
+  );
+  const numbers = table
+    .getAllByRole("row")
+    .slice(1)
+    .map((r) => (r as HTMLTableRowElement).cells[1].textContent);
+  expect(numbers).toEqual(["2026-10-001", "2026-10-003"]);
+  // Without an address, nothing is selected.
+  expect(
+    table.getByRole("checkbox", { name: "Envoyer la facture 2026-10-001" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Envoyer 0 facture" }),
+  ).toBeDisabled();
+
+  await user.type(
+    table.getByLabelText("Destinataire de la facture 2026-10-001"),
+    "anne@example.org",
+  );
+  await user.type(
+    table.getByLabelText("Destinataire de la facture 2026-10-003"),
+    "paul@refuse.example",
+  );
+  await user.click(screen.getByRole("button", { name: "Envoyer 2 factures" }));
+
+  const report = await screen.findByRole("status");
+  expect(report).toHaveTextContent("1 facture envoyée, 1 en échec");
+  expect(report).toHaveTextContent(
+    "2026-10-003 : Le serveur a refusé le message",
+  );
+  expect(state.sentMails.map((m) => m.invoiceId)).toEqual([1]);
+  // The failed one stays, selected, to fix and resend.
+  expect(table.getAllByRole("row")).toHaveLength(2);
+  expect(
+    table.getByRole("checkbox", { name: "Envoyer la facture 2026-10-003" }),
+  ).toBeChecked();
+  expect(await screen.findAllByText("Envoyée le 16/10/2026")).toHaveLength(2);
+});
+
+test("envoi groupé arrêté si l'identifiant est refusé", async () => {
+  const user = userEvent.setup();
+  const state = fakeBackend("unlocked");
+  state.mail = {
+    ...state.mail,
+    host: "smtp.example.org",
+    from_email: "c@example.org",
+  };
+  state.smtpPassword = "wrong";
+  state.invoices = [{ ...INVOICE }];
+  render(<App />);
+  await user.click(await screen.findByRole("button", { name: "Factures" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Envoyer les factures non envoyées…",
+    }),
+  );
+  await user.type(
+    await screen.findByLabelText("Destinataire de la facture 2026-10-001"),
+    "anne@example.org",
+  );
+  await user.click(screen.getByRole("button", { name: "Envoyer 1 facture" }));
+  const report = await screen.findByRole("status");
+  expect(report).toHaveTextContent("0 facture envoyée, 1 en échec");
+  expect(report).toHaveTextContent(
+    "2026-10-001 : Le serveur a refusé l'identifiant",
+  );
+  expect(state.invoices[0].sent_at).toBeNull();
+});

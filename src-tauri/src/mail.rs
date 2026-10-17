@@ -277,6 +277,100 @@ fn build(
     message.map_err(|_| SessionError::Invalid("to"))
 }
 
+// --- Batch sending ---
+
+/// An unsent invoice with its e-mail, for review before a batch send.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Unsent {
+    pub invoice: InvoiceView,
+    pub draft: Draft,
+}
+
+/// Every invoice neither sent nor cancelled, oldest first.
+pub fn unsent(conn: &Connection) -> Result<Vec<Unsent>> {
+    invoices::list_unsent(conn)?
+        .into_iter()
+        .map(|invoice| {
+            let draft = invoice_draft(conn, invoice.invoice.id)?;
+            Ok(Unsent { invoice, draft })
+        })
+        .collect()
+}
+
+/// One invoice of a batch, as reviewed.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct BatchItem {
+    pub invoice_id: i64,
+    pub draft: Draft,
+}
+
+pub struct Prepared {
+    invoice_id: i64,
+    number: String,
+    outgoing: Result<Outgoing>,
+}
+
+/// Outcome per invoice; `error` is `None` once sent.
+#[derive(Debug, Serialize)]
+pub struct BatchResult {
+    pub invoice_id: i64,
+    pub number: String,
+    pub error: Option<SessionError>,
+}
+
+/// Builds every message while the database is locked; a bad one only fails itself.
+pub fn prepare_batch(conn: &Connection, items: &[BatchItem]) -> Result<Vec<Prepared>> {
+    items
+        .iter()
+        .map(|item| {
+            Ok(Prepared {
+                invoice_id: item.invoice_id,
+                number: invoices::get(conn, item.invoice_id)?.number,
+                outgoing: invoice_message(conn, item.invoice_id, &item.draft),
+            })
+        })
+        .collect()
+}
+
+/// Failures that would repeat for every message: the rest of the batch is not attempted.
+fn stops_the_batch(kind: &str) -> bool {
+    matches!(
+        kind,
+        "not_configured" | "no_password" | "keychain" | "auth" | "connection"
+    )
+}
+
+/// Sends in order and reports each invoice, stopping at the first failure that would
+/// repeat for all the others.
+pub fn send_batch(
+    prepared: Vec<Prepared>,
+    mut deliver: impl FnMut(&Outgoing) -> Result<()>,
+) -> Vec<BatchResult> {
+    let mut stopped: Option<&'static str> = None;
+    prepared
+        .into_iter()
+        .map(|p| {
+            let error = match (stopped, p.outgoing) {
+                (_, Err(e)) => Some(e),
+                (Some(kind), Ok(_)) => Some(SessionError::Mail(kind)),
+                (None, Ok(outgoing)) => match deliver(&outgoing) {
+                    Ok(()) => None,
+                    Err(SessionError::Mail(kind)) if stops_the_batch(kind) => {
+                        stopped = Some(kind);
+                        Some(SessionError::Mail(kind))
+                    }
+                    Err(e) => Some(e),
+                },
+            };
+            BatchResult {
+                invoice_id: p.invoice_id,
+                number: p.number,
+                error,
+            }
+        })
+        .collect()
+}
+
 /// A test e-mail to the sender's own address.
 pub fn test_message(conn: &Connection) -> Result<Outgoing> {
     let settings = settings(conn)?;
@@ -407,6 +501,38 @@ pub async fn send_invoice_email(state: State<'_>, id: i64, draft: Draft) -> Resu
         .await
         .map_err(|_| SessionError::Mail("connection"))??;
     invoices::set_sent(state.lock().unwrap().conn()?, id, true)
+}
+
+#[tauri::command]
+pub fn list_unsent_invoice_emails(state: State) -> Result<Vec<Unsent>> {
+    unsent(state.lock().unwrap().conn()?)
+}
+
+/// Sends the reviewed invoices over one login (the keychain is read once) and marks the
+/// ones sent.
+#[tauri::command]
+pub async fn send_invoice_emails(
+    state: State<'_>,
+    items: Vec<BatchItem>,
+) -> Result<Vec<BatchResult>> {
+    let prepared = prepare_batch(state.lock().unwrap().conn()?, &items)?;
+    let results = tauri::async_runtime::spawn_blocking(move || {
+        let mut smtp: Option<SmtpTransport> = None;
+        send_batch(prepared, |o| {
+            if smtp.is_none() {
+                smtp = Some(transport(&o.settings, keychain_password()?)?);
+            }
+            deliver(smtp.as_ref().expect("just set"), &o.message)
+        })
+    })
+    .await
+    .map_err(|_| SessionError::Mail("connection"))?;
+    let session = state.lock().unwrap();
+    let conn = session.conn()?;
+    for r in results.iter().filter(|r| r.error.is_none()) {
+        invoices::set_sent(conn, r.invoice_id, true)?;
+    }
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -592,6 +718,95 @@ mod tests {
         assert_eq!(
             invalid_field(invoice_message(&f.conn, invoice.id, &bad_to).map(|_| ())),
             "to"
+        );
+    }
+
+    #[test]
+    fn unsent_lists_invoices_to_send_oldest_first() {
+        let mut f = fixture();
+        let first = f.invoice("2026-10-14");
+        let sent = f.invoice("2026-10-15");
+        let cancelled = f.invoice("2026-10-16");
+        let last = f.invoice("2026-10-16");
+        invoices::set_sent(&f.conn, sent.id, true).unwrap();
+        invoices::cancel(&mut f.conn, cancelled.id, "", day("2026-10-17")).unwrap();
+        let list = unsent(&f.conn).unwrap();
+        let ids: Vec<_> = list.iter().map(|u| u.invoice.invoice.id).collect();
+        assert_eq!(ids, [first.id, last.id]);
+        assert_eq!(list[1].draft.subject, format!("Facture {}", last.number));
+    }
+
+    fn item(invoice_id: i64, to: &str) -> BatchItem {
+        BatchItem {
+            invoice_id,
+            draft: Draft {
+                to: to.into(),
+                subject: "Facture".into(),
+                body: "Bonjour".into(),
+            },
+        }
+    }
+
+    fn outcome(results: &[BatchResult]) -> Vec<(String, Option<String>)> {
+        results
+            .iter()
+            .map(|r| (r.number.clone(), r.error.as_ref().map(|e| e.to_string())))
+            .collect()
+    }
+
+    #[test]
+    fn a_batch_reports_each_invoice() {
+        let mut f = fixture();
+        configured(&f);
+        let ids: Vec<_> = (14..=17)
+            .map(|d| f.invoice(&format!("2026-10-{d}")).id)
+            .collect();
+        let items = [
+            item(ids[0], "anne@example.org"),
+            item(ids[1], "anne"),
+            item(ids[2], "refuse@example.org"),
+            item(ids[3], "anne@example.org"),
+        ];
+        let mut delivered = vec![];
+        let results = send_batch(prepare_batch(&f.conn, &items).unwrap(), |o| {
+            let to = o.message.envelope().to()[0].to_string();
+            if to == "refuse@example.org" {
+                return Err(SessionError::Mail("rejected"));
+            }
+            delivered.push(to);
+            Ok(())
+        });
+        assert_eq!(
+            outcome(&results),
+            [
+                ("2026-10-001".into(), None),
+                ("2026-10-002".into(), Some("invalid to".into())),
+                ("2026-10-003".into(), Some("mail: rejected".into())),
+                ("2026-10-004".into(), None),
+            ]
+        );
+        assert_eq!(delivered, ["anne@example.org", "anne@example.org"]);
+    }
+
+    #[test]
+    fn a_login_failure_stops_the_batch() {
+        let mut f = fixture();
+        configured(&f);
+        let a = f.invoice("2026-10-14").id;
+        let b = f.invoice("2026-10-15").id;
+        let items = [item(a, "anne@example.org"), item(b, "anne@example.org")];
+        let mut attempts = 0;
+        let results = send_batch(prepare_batch(&f.conn, &items).unwrap(), |_| {
+            attempts += 1;
+            Err(SessionError::Mail("auth"))
+        });
+        assert_eq!(attempts, 1);
+        assert_eq!(
+            outcome(&results),
+            [
+                ("2026-10-001".into(), Some("mail: auth".into())),
+                ("2026-10-002".into(), Some("mail: auth".into())),
+            ]
         );
     }
 
