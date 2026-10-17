@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import type { LockStatus } from "../lock/api";
@@ -832,4 +832,14 @@ export function fakeBackend(initial: LockStatus) {
 
 export async function openSettings(user: UserEvent) {
   await user.click(await screen.findByRole("button", { name: "Paramètres" }));
+}
+
+/** Opens the settings page, unfolds a sub-category and returns queries scoped to it. */
+export async function openSettingsSection(user: UserEvent, title: string) {
+  await openSettings(user);
+  const heading = await screen.findByRole("heading", { name: title });
+  const fold = heading.closest("details")!;
+  if (!fold.open) await user.click(heading);
+  expect(fold.open).toBe(true);
+  return within(fold);
 }

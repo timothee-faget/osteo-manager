@@ -41,8 +41,7 @@ export function BackupSettings({ onRestored }: { onRestored: () => void }) {
 
   if (!status) return null;
   return (
-    <section>
-      <h2>Sauvegarde</h2>
+    <div className="backup">
       {status.folder ? (
         <p>
           Dossier : <code>{status.folder}</code>
@@ -63,19 +62,25 @@ export function BackupSettings({ onRestored }: { onRestored: () => void }) {
         </p>
       )}
       {error && <p role="alert">{error}</p>}
-      <button type="button" disabled={busy} onClick={() => void chooseFolder()}>
-        {status.folder ? "Changer de dossier…" : "Choisir le dossier…"}
-      </button>
-      {status.folder && (
+      <div className="actions">
         <button
           type="button"
           disabled={busy}
-          onClick={() => void run(backupApi.backupNow)}
+          onClick={() => void chooseFolder()}
         >
-          {busy ? "Sauvegarde…" : "Sauvegarder maintenant"}
+          {status.folder ? "Changer de dossier…" : "Choisir le dossier…"}
         </button>
-      )}
+        {status.folder && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run(backupApi.backupNow)}
+          >
+            {busy ? "Sauvegarde…" : "Sauvegarder maintenant"}
+          </button>
+        )}
+      </div>
       <RestoreButton replacesData onRestored={onRestored} />
-    </section>
+    </div>
   );
 }

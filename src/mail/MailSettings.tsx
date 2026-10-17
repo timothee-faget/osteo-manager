@@ -12,7 +12,7 @@ import {
 
 type Draft = Omit<Settings, "port"> & { port: string; password: string };
 
-/** Outgoing mail server and the invoice e-mail template. */
+/** Outgoing mail server. */
 export function MailSettings() {
   const [form, setForm] = useState<Draft | null>(null);
   const { busy, save, setMessage, feedback } = useSave();
@@ -68,14 +68,13 @@ export function MailSettings() {
   );
 
   return (
-    <section>
-      <h2>E-mails</h2>
-      <form onSubmit={(e) => void submit(e)}>
+    <form onSubmit={(e) => void submit(e)}>
+      <small>
+        Gmail : smtp.gmail.com, port 587, avec un mot de passe d'application.
+        Orange : smtp.orange.fr, port 465. Free : smtp.free.fr, port 465.
+      </small>
+      <div className="fields">
         {input("host", "Serveur SMTP")}
-        <small>
-          Gmail : smtp.gmail.com, port 587, avec un mot de passe d'application.
-          Orange : smtp.orange.fr, port 465. Free : smtp.free.fr, port 465.
-        </small>
         {input("port", "Port")}
         <label>
           Sécurité
@@ -104,28 +103,27 @@ export function MailSettings() {
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
         </label>
-        <small>
-          Le mot de passe est gardé dans le trousseau de macOS, pas dans la base
-          ni dans les sauvegardes.
-        </small>
         {input("from_email", "Adresse d'expédition", "email")}
         {input("from_name", "Nom affiché")}
-        {feedback}
+      </div>
+      <small>
+        Le mot de passe est gardé dans le trousseau de macOS, pas dans la base
+        ni dans les sauvegardes.
+      </small>
+      {feedback}
+      <div className="actions">
         <button type="submit" disabled={busy}>
           Enregistrer
         </button>
         <button type="button" disabled={busy} onClick={() => void test()}>
           Envoyer un e-mail de test
         </button>
-      </form>
-
-      <TemplateForm kind="invoice" title="Modèle d'envoi des factures" />
-      <TemplateForm kind="reminder" title="Modèle de relance des impayés" />
-    </section>
+      </div>
+    </form>
   );
 }
 
-function TemplateForm({ kind, title }: { kind: Kind; title: string }) {
+export function TemplateForm({ kind, title }: { kind: Kind; title: string }) {
   const [template, setTemplate] = useState<Template | null>(null);
   const { busy, save, feedback } = useSave();
 
@@ -145,7 +143,6 @@ function TemplateForm({ kind, title }: { kind: Kind; title: string }) {
         );
       }}
     >
-      <h3>{title}</h3>
       <label>
         Objet
         <input

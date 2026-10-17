@@ -567,6 +567,7 @@ form.confirm > button {
 
 /* Segmented control (theme choice). */
 .segmented {
+  align-self: flex-start;
   display: inline-flex;
   gap: var(--space-1);
   padding: var(--space-1);
@@ -677,7 +678,6 @@ form.confirm > button {
 /* --- Cards --- */
 
 .card,
-.settings > section,
 .invoice-detail,
 .batch-send,
 .session-form,
@@ -715,17 +715,87 @@ form.confirm > button {
   margin-bottom: 0;
 }
 
-.settings > section h2 {
-  font-size: var(--text-lg);
-  margin-bottom: var(--space-4);
+/* Collapsible settings: a category card holding sub-categories. */
+.fold {
+  gap: 0;
 }
 
-.settings > section h3 {
-  font-size: var(--text-md);
-  font-weight: 600;
-  margin-top: var(--space-5);
-  padding-top: var(--space-5);
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary > svg {
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.fold[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.fold > summary h3,
+.fold > summary h4 {
+  margin: 0;
+}
+
+.fold > summary small {
+  display: block;
+}
+
+.fold-sub {
   border-top: 1px solid var(--line);
+}
+
+.fold-sub > summary {
+  min-height: var(--row-h);
+  padding: var(--space-3) 0;
+}
+
+.fold-sub > summary h4 {
+  font-weight: 500;
+}
+
+.fold-sub > summary:hover h4 {
+  color: var(--accent-dark);
+}
+
+.card.fold > .fold-body {
+  margin-top: var(--space-4);
+}
+
+.fold-sub > .fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 0 var(--space-5) calc(var(--icon) + var(--space-3));
+}
+
+.fold-body > button,
+.backup button {
+  align-self: flex-start;
+}
+
+.fold-body input[type="number"] {
+  align-self: flex-start;
+  width: 8rem;
+}
+
+.backup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.backup p,
+.logo p {
+  margin: 0;
 }
 
 .invoice-detail,
@@ -789,7 +859,6 @@ summary {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-  margin-top: var(--space-4);
 }
 
 .logo img {

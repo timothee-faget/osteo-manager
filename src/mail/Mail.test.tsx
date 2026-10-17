@@ -5,7 +5,7 @@ import { check } from "@tauri-apps/plugin-updater";
 import App from "../App";
 import type { InvoiceView } from "../invoices/api";
 import type { Patient } from "../patients/api";
-import { fakeBackend, openSettings } from "../test/fakeBackend";
+import { fakeBackend, openSettingsSection } from "../test/fakeBackend";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
@@ -38,11 +38,8 @@ const INVOICE: InvoiceView = {
 const calls = (cmd: string) =>
   vi.mocked(invoke).mock.calls.filter(([c]) => c === cmd);
 
-async function mailSection(user: ReturnType<typeof userEvent.setup>) {
-  await openSettings(user);
-  const heading = await screen.findByRole("heading", { name: "E-mails" });
-  return within(heading.closest("section")!);
-}
+const mailSection = (user: ReturnType<typeof userEvent.setup>) =>
+  openSettingsSection(user, "Serveur d'envoi");
 
 test("paramètres SMTP : mot de passe au trousseau, puis e-mail de test", async () => {
   const user = userEvent.setup();
@@ -123,7 +120,7 @@ test("modèles de mail des factures et des relances", async () => {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   render(<App />);
-  await mailSection(user);
+  await openSettingsSection(user, "Modèle d'envoi des factures");
   const s = within(
     screen.getByRole("form", { name: "Modèle d'envoi des factures" }),
   );
@@ -139,6 +136,9 @@ test("modèles de mail des factures et des relances", async () => {
   expect(await s.findByText("Modèle enregistré.")).toBeInTheDocument();
   expect(state.templates.invoice.subject).toBe("Votre facture {numero}");
 
+  await user.click(
+    screen.getByRole("heading", { name: "Modèle de relance des impayés" }),
+  );
   const r = within(
     screen.getByRole("form", { name: "Modèle de relance des impayés" }),
   );

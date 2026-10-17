@@ -4,7 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import App from "../App";
-import { fakeBackend, openSettings } from "../test/fakeBackend";
+import {
+  fakeBackend,
+  openSettings,
+  openSettingsSection,
+} from "../test/fakeBackend";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
@@ -16,22 +20,35 @@ beforeEach(() => {
   vi.mocked(check).mockReset().mockResolvedValue(null);
 });
 
-async function section(title: string) {
-  const heading = await screen.findByRole("heading", { name: title });
-  return within(heading.closest("section")!);
-}
-
 async function setup() {
   const user = userEvent.setup();
   const state = fakeBackend("unlocked");
   render(<App />);
-  await openSettings(user);
   return { user, state };
 }
 
+test("catégories ouvertes, sous-catégories repliées et dépliables", async () => {
+  const { user } = await setup();
+  await openSettings(user);
+  const fold = async (name: string) =>
+    (await screen.findByRole("heading", { name })).closest("details")!;
+
+  for (const category of ["Cabinet", "Facturation", "E-mails", "Application"]) {
+    expect(await fold(category)).toHaveAttribute("open");
+  }
+  const fees = await fold("Tarifs");
+  expect(fees).not.toHaveAttribute("open");
+
+  await user.click(screen.getByRole("heading", { name: "Tarifs" }));
+  expect(fees).toHaveAttribute("open");
+
+  await user.click(screen.getByRole("heading", { name: "Facturation" }));
+  expect(await fold("Facturation")).not.toHaveAttribute("open");
+});
+
 test("enregistre l'identité de la praticienne et affiche les erreurs de validation", async () => {
   const { user, state } = await setup();
-  const s = await section("Praticienne");
+  const s = await openSettingsSection(user, "Praticienne");
 
   await user.type(s.getByLabelText("Nom"), " Martin ");
   await user.type(s.getByLabelText("Numéro RPPS"), "123");
@@ -54,7 +71,7 @@ test("enregistre l'identité de la praticienne et affiche les erreurs de validat
 test("ajoute puis retire un logo", async () => {
   const { user, state } = await setup();
   vi.mocked(open).mockResolvedValue("/Users/x/logo.png");
-  const s = await section("Praticienne");
+  const s = await openSettingsSection(user, "Logo");
 
   await user.click(s.getByRole("button", { name: "Choisir un logo…" }));
   expect(await s.findByRole("img", { name: "Logo" })).toBeInTheDocument();
@@ -65,7 +82,7 @@ test("ajoute puis retire un logo", async () => {
 
 test("lieux d'exercice : ajout, modification du taux et archivage", async () => {
   const { user, state } = await setup();
-  const s = await section("Lieux d'exercice");
+  const s = await openSettingsSection(user, "Lieux d'exercice");
   expect(s.getByText("Aucun lieu pour l'instant.")).toBeInTheDocument();
 
   await user.click(s.getByRole("button", { name: "Ajouter un lieu" }));
@@ -105,18 +122,15 @@ test("lieux d'exercice : ajout, modification du taux et archivage", async () => 
   expect(state.locations[0].archived).toBe(true);
 });
 
-test("tarifs et provisions : valeurs par défaut puis modification en centimes et points de base", async () => {
+test("tarifs puis provisions, chacun sans écraser l'autre", async () => {
   const { user, state } = await setup();
-  const s = await section("Tarifs et provisions");
+  const fees = await openSettingsSection(user, "Tarifs");
 
-  expect(s.getByLabelText("Tarif standard")).toHaveValue("60,00");
-  expect(s.getByLabelText("Provision impôt")).toHaveValue("45");
-  expect(s.getByLabelText("Provision URSSAF")).toHaveValue("26");
-
-  await user.clear(s.getByLabelText("Tarif à domicile"));
-  await user.type(s.getByLabelText("Tarif à domicile"), "abc");
-  await user.click(s.getByRole("button", { name: "Enregistrer" }));
-  expect(await s.findByRole("alert")).toHaveTextContent(
+  expect(fees.getByLabelText("Tarif standard")).toHaveValue("60,00");
+  await user.clear(fees.getByLabelText("Tarif à domicile"));
+  await user.type(fees.getByLabelText("Tarif à domicile"), "abc");
+  await user.click(fees.getByRole("button", { name: "Enregistrer" }));
+  expect(await fees.findByRole("alert")).toHaveTextContent(
     "Saisissez des nombres",
   );
   expect(invoke).not.toHaveBeenCalledWith(
@@ -124,13 +138,23 @@ test("tarifs et provisions : valeurs par défaut puis modification en centimes e
     expect.anything(),
   );
 
-  await user.clear(s.getByLabelText("Tarif à domicile"));
-  await user.type(s.getByLabelText("Tarif à domicile"), "75,50");
-  await user.clear(s.getByLabelText("Provision URSSAF"));
-  await user.type(s.getByLabelText("Provision URSSAF"), "25,5");
-  await user.click(s.getByRole("button", { name: "Enregistrer" }));
-  expect(await s.findByRole("status")).toHaveTextContent(
-    "Tarifs et provisions enregistrés.",
+  await user.clear(fees.getByLabelText("Tarif à domicile"));
+  await user.type(fees.getByLabelText("Tarif à domicile"), "75,50");
+  await user.click(fees.getByRole("button", { name: "Enregistrer" }));
+  expect(await fees.findByRole("status")).toHaveTextContent(
+    "Tarifs enregistrés.",
+  );
+
+  await user.click(screen.getByRole("heading", { name: "Provisions" }));
+  const provisions = within(
+    screen.getByRole("heading", { name: "Provisions" }).closest("details")!,
+  );
+  expect(provisions.getByLabelText("Provision impôt")).toHaveValue("45");
+  await user.clear(provisions.getByLabelText("Provision URSSAF"));
+  await user.type(provisions.getByLabelText("Provision URSSAF"), "25,5");
+  await user.click(provisions.getByRole("button", { name: "Enregistrer" }));
+  expect(await provisions.findByRole("status")).toHaveTextContent(
+    "Provisions enregistrées.",
   );
   expect(state.billing).toEqual({
     standard_fee_cents: 6000,
@@ -142,7 +166,7 @@ test("tarifs et provisions : valeurs par défaut puis modification en centimes e
 
 test("le thème s'applique tout de suite et est retenu", async () => {
   const { user } = await setup();
-  const s = await section("Apparence");
+  const s = await openSettingsSection(user, "Apparence");
   expect(s.getByRole("button", { name: "Auto" })).toHaveAttribute(
     "aria-pressed",
     "true",

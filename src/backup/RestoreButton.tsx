@@ -38,7 +38,7 @@ export function RestoreButton({
   return (
     <div className="restore">
       {pending ? (
-        <>
+        <div className="confirm">
           <p>
             Les données actuelles seront remplacées par celles de la sauvegarde.
             Elles ne sont pas supprimées : elles sont mises de côté dans le
@@ -55,7 +55,7 @@ export function RestoreButton({
           <button type="button" onClick={() => setPending(null)}>
             Annuler
           </button>
-        </>
+        </div>
       ) : (
         <button
           type="button"
