@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AccountingPage } from "./accounting/AccountingPage";
 import { CollectionsPage } from "./collections/CollectionsPage";
 import { ExpensesPage } from "./expenses/ExpensesPage";
 import { FixedAssetsPage } from "./fixedAssets/FixedAssetsPage";
@@ -16,6 +17,7 @@ type Page =
   | "collections"
   | "expenses"
   | "assets"
+  | "accounting"
   | "settings";
 
 const PAGES: Record<Page, string> = {
@@ -25,6 +27,7 @@ const PAGES: Record<Page, string> = {
   collections: "Encaissements",
   expenses: "Dépenses",
   assets: "Immobilisations",
+  accounting: "Comptabilité",
   settings: "Paramètres",
 };
 
@@ -104,6 +107,7 @@ function Home({
         )}
         {page === "expenses" && <ExpensesPage />}
         {page === "assets" && <FixedAssetsPage />}
+        {page === "accounting" && <AccountingPage />}
         {page === "settings" && autoLock !== null && (
           <SettingsPage
             autoLock={autoLock}

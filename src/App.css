@@ -329,3 +329,7 @@ summary {
   gap: 0.75rem;
   margin-top: 1.5rem;
 }
+
+tr.total td {
+  font-weight: 600;
+}

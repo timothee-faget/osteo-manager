@@ -15,6 +15,7 @@ import type { Payment } from "../invoices/paymentsApi";
 import type { Category, Due, Expense, Recurring } from "../expenses/api";
 import type { Annuity, AssetYear } from "../fixedAssets/api";
 import type { Cheque, Deposit } from "../collections/api";
+import type { Journal, Summary } from "../accounting/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -69,6 +70,9 @@ export function fakeBackend(initial: LockStatus) {
     /** Cheques by payment id; `deposit` is the deposit id once deposited. */
     cheques: [] as (Cheque & { deposit: number | null })[],
     deposits: [] as Deposit[],
+    /** Returned as is, whatever the year. */
+    journal: null as Journal | null,
+    summary: null as Summary | null,
   };
   const strip = (c: (typeof state.cheques)[number]): Cheque => ({
     payment_id: c.payment_id,
@@ -492,6 +496,29 @@ export function fakeBackend(initial: LockStatus) {
       }
       case "delete_fixed_asset":
         state.assets = state.assets.filter((x) => x.id !== a.id);
+        return;
+      case "get_journal":
+        return (
+          state.journal ?? {
+            year: a.year,
+            entries: [],
+            receipts_cents: 0,
+            expenses_cents: 0,
+          }
+        );
+      case "get_tax_summary":
+        return (
+          state.summary ?? {
+            year: a.year,
+            sections: [],
+            receipts_cents: 0,
+            expenses_cents: 0,
+            depreciation_cents: 0,
+            disposal_gains_cents: 0,
+            result_cents: 0,
+          }
+        );
+      case "export_accounting":
         return;
       case "list_unpaid_invoices": {
         const invoices = state.invoices
