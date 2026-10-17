@@ -305,6 +305,14 @@ pub const MIGRATIONS: &[&str] = &[
     ) STRICT;
     ALTER TABLE payment ADD COLUMN deposit_id INTEGER REFERENCES cheque_deposit (id);
     CREATE INDEX payment_deposit ON payment (deposit_id);",
+    // v11: retrocessions paid to a practice location, one per location and month, each
+    // recorded as an expense (deleting the expense frees the month).
+    "CREATE TABLE retrocession_payment (
+        location_id INTEGER NOT NULL REFERENCES practice_location (id),
+        month TEXT NOT NULL,
+        expense_id INTEGER NOT NULL UNIQUE REFERENCES expense (id) ON DELETE CASCADE,
+        PRIMARY KEY (location_id, month)
+    ) STRICT;",
 ];
 
 #[derive(Debug, thiserror::Error)]

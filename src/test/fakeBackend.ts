@@ -12,7 +12,13 @@ import type { Attachment } from "../patients/attachmentsApi";
 import type { Session } from "../patients/sessionsApi";
 import type { InvoiceView } from "../invoices/api";
 import type { Payment } from "../invoices/paymentsApi";
-import type { Category, Due, Expense, Recurring } from "../expenses/api";
+import type {
+  Category,
+  Due,
+  Expense,
+  Recurring,
+  RetrocessionMonth,
+} from "../expenses/api";
 import type { Annuity, AssetYear } from "../fixedAssets/api";
 import type { Cheque, Deposit } from "../collections/api";
 import type { Journal, Summary } from "../accounting/api";
@@ -64,6 +70,7 @@ export function fakeBackend(initial: LockStatus) {
     nextExpenseId: 1,
     recurring: [] as Recurring[],
     due: [] as Due[],
+    retrocessions: [] as RetrocessionMonth[],
     /** Fake rule: the register shows every asset, with a fifth of its cost. */
     assets: [] as AssetYear[],
     schedule: [] as Annuity[],
@@ -469,6 +476,33 @@ export function fakeBackend(initial: LockStatus) {
       case "archive_recurring_expense":
         state.recurring.find((x) => x.id === a.id)!.archived = true;
         return;
+      case "list_retrocessions":
+        return state.retrocessions;
+      case "pay_retrocession": {
+        const p = a.payment;
+        const m = state.retrocessions.find(
+          (r) => r.location_id === p.location_id && r.month === p.month,
+        )!;
+        const e: Expense = {
+          id: state.nextExpenseId++,
+          paid_on: p.paid_on,
+          supplier: m.location_name,
+          label: `Rétrocession ${p.month}`,
+          amount_cents: p.amount_cents,
+          method: p.method,
+          category: "retrocession",
+          recurring_id: null,
+          recurring_month: null,
+          receipt: null,
+        };
+        state.expenses.push(e);
+        m.paid = {
+          expense_id: e.id,
+          paid_on: p.paid_on,
+          amount_cents: p.amount_cents,
+        };
+        return e;
+      }
       case "due_recurring_expenses":
         return state.due;
       case "skip_recurring_expense":

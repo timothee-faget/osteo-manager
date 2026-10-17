@@ -85,6 +85,8 @@ const MESSAGES: Record<string, string> = {
     "La date de cession doit être entre la date d'acquisition et aujourd'hui.",
   invalid_disposal_price: "Le prix de cession ne peut pas être négatif.",
   invalid_fixed_asset: "Immobilisation introuvable.",
+  invalid_month: "Mois invalide.",
+  invalid_retrocession_paid: "La rétrocession de ce mois est déjà enregistrée.",
   invalid_recurring_month: "Ce mois est déjà enregistré ou ignoré.",
 };
 

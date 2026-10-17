@@ -14,6 +14,7 @@ import {
 } from "./api";
 import { ExpenseForm, type Editing } from "./ExpenseForm";
 import { RecurringSection } from "./RecurringSection";
+import { RetrocessionsSection } from "./RetrocessionsSection";
 
 const inputOf = (d: Due): ExpenseInput => ({
   paid_on: d.due_on,
@@ -131,6 +132,7 @@ export function ExpensesPage() {
           </table>
         </section>
       )}
+      <RetrocessionsSection onPaid={() => void refresh()} />
       {feedback}
       {editing ? (
         <ExpenseForm

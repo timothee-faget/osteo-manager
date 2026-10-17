@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use rusqlite::{Connection, params};
 use serde::Serialize;
 
-use crate::expenses::{self, CATEGORIES};
+use crate::expenses::{self, CATEGORIES, RETROCESSION};
 use crate::fixed_assets;
 use crate::pdf::{self, Column, Report, ReportRow, euros, french_date};
 use crate::session::{SessionError, State};
@@ -204,7 +204,10 @@ pub struct SummarySection {
 pub struct Summary {
     pub year: i32,
     pub sections: Vec<SummarySection>,
+    /// Fees received (line 1).
     pub receipts_cents: i64,
+    /// Fees paid back to practice locations (line 3), deducted from receipts.
+    pub retrocessions_cents: i64,
     pub expenses_cents: i64,
     pub depreciation_cents: i64,
     /// Gains minus losses on assets sold or scrapped during the year.
@@ -232,8 +235,14 @@ pub fn summary(conn: &Connection, year: i32) -> Result<Summary> {
     let receipts_cents: i64 = fees(conn, year)?.iter().map(|f| f.amount_cents).sum();
 
     let expenses = expenses::list(conn, year)?;
+    let retrocessions_cents: i64 = expenses
+        .iter()
+        .filter(|e| e.data.category == RETROCESSION)
+        .map(|e| e.data.amount_cents)
+        .sum();
+    let net_receipts = receipts_cents - retrocessions_cents;
     let mut expense_lines = Vec::new();
-    for c in CATEGORIES {
+    for c in CATEGORIES.iter().filter(|c| c.code != RETROCESSION) {
         let amount: i64 = expenses
             .iter()
             .filter(|e| e.data.category == c.code)
@@ -282,7 +291,7 @@ pub fn summary(conn: &Connection, year: i32) -> Result<Summary> {
     asset_lines.push(total("Total des dotations", depreciation_cents));
     let disposal_gains_cents: i64 = disposal_lines.iter().map(|l| l.amount_cents).sum();
 
-    let surplus = receipts_cents - expenses_cents;
+    let surplus = net_receipts - expenses_cents;
     let result_cents = surplus - depreciation_cents + disposal_gains_cents;
 
     let mut sections = vec![
@@ -294,7 +303,8 @@ pub fn summary(conn: &Connection, year: i32) -> Result<Summary> {
                     "Recettes encaissées, y compris les remboursements de frais",
                     receipts_cents,
                 ),
-                total("Montant net des recettes", receipts_cents),
+                line(Some("3"), "Honoraires rétrocédés", retrocessions_cents),
+                total("Montant net des recettes", net_receipts),
             ],
         },
         SummarySection {
@@ -304,7 +314,7 @@ pub fn summary(conn: &Connection, year: i32) -> Result<Summary> {
         SummarySection {
             title: "2035-B : résultat".into(),
             lines: vec![
-                line(None, "Recettes nettes", receipts_cents),
+                line(None, "Recettes nettes", net_receipts),
                 line(None, "Dépenses professionnelles", -expenses_cents),
                 total(
                     if surplus >= 0 {
@@ -342,6 +352,7 @@ pub fn summary(conn: &Connection, year: i32) -> Result<Summary> {
         year,
         sections,
         receipts_cents,
+        retrocessions_cents,
         expenses_cents,
         depreciation_cents,
         disposal_gains_cents,
@@ -646,6 +657,7 @@ mod tests {
         spend(&mut f, "2026-10-02", "rent", 50000);
         spend(&mut f, "2026-03-15", "insurance", 30000);
         spend(&mut f, "2025-12-31", "office", 999);
+        spend(&mut f, "2026-11-05", RETROCESSION, 1800);
         asset(&f, "2026-01-01", 300000, None);
         asset(&f, "2024-01-01", 100000, Some(("2026-06-30", 50000)));
         f
@@ -670,9 +682,10 @@ mod tests {
                 ("2026-10-01", EntryKind::Expense, 0, 50000),
                 ("2026-10-02", EntryKind::Expense, 0, 50000),
                 ("2026-10-16", EntryKind::Fee, 6000, 0),
+                ("2026-11-05", EntryKind::Expense, 0, 1800),
             ]
         );
-        assert_eq!((j.receipts_cents, j.expenses_cents), (62000, 430000));
+        assert_eq!((j.receipts_cents, j.expenses_cents), (62000, 431800));
         let fee = &j.entries[1];
         // The invoice number, never the patient.
         assert_eq!(fee.label, "Honoraires, facture 2025-12-001");
@@ -694,7 +707,18 @@ mod tests {
         assert_eq!(s.depreciation_cents, 70000);
         // Sold 500 € for a net value of 1000 − 200 − 200 − 100 = 500 €.
         assert_eq!(s.disposal_gains_cents, 0);
-        assert_eq!(s.result_cents, 12000 - 130000 - 70000);
+        // Retrocessions are deducted from receipts, not counted as expenses.
+        assert_eq!(s.retrocessions_cents, 1800);
+        assert_eq!(s.result_cents, 12000 - 1800 - 130000 - 70000);
+        let receipts: Vec<_> = s.sections[0]
+            .lines
+            .iter()
+            .map(|l| (l.line.as_deref(), l.amount_cents))
+            .collect();
+        assert_eq!(
+            receipts,
+            [(Some("1"), 12000), (Some("3"), 1800), (None, 10200)]
+        );
 
         let expenses = &s.sections[1].lines;
         let lines: Vec<_> = expenses
@@ -732,13 +756,13 @@ mod tests {
         ));
         // Separators and quotes inside a field are quoted.
         assert!(text.contains(";\"Fournisseur; \"\"test\"\"\";"));
-        assert!(text.ends_with(";Total;;;;620,00;4300,00\r\n"));
+        assert!(text.ends_with(";Total;;;;620,00;4318,00\r\n"));
 
         let summary = String::from_utf8(summary_csv(&summary(&f.conn, 2026).unwrap())).unwrap();
         assert!(summary.contains(
             "2035-A : dépenses professionnelles;15;Loyers et charges locatives;1000,00\r\n"
         ));
-        assert!(summary.contains("2035-B : résultat;;Résultat estimé;-1880,00\r\n"));
+        assert!(summary.contains("2035-B : résultat;;Résultat estimé;-1898,00\r\n"));
         assert_eq!(csv_amount(-5), "-0,05");
     }
 

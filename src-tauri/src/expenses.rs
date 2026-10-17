@@ -22,12 +22,17 @@ pub struct Category {
     pub label: &'static str,
 }
 
+/// Fees paid back to a practice location.
+pub const RETROCESSION: &str = "retrocession";
+
 const fn cat(code: &'static str, line: u8, label: &'static str) -> Category {
     Category { code, line, label }
 }
 
-/// Expense lines of the 2035-A that apply to a practitioner without employees.
+/// Lines of the 2035-A that apply to a practitioner without employees: retrocessions are
+/// deducted from receipts (line 3), the others are expenses (lines 8 to 32).
 pub const CATEGORIES: &[Category] = &[
+    cat(RETROCESSION, 3, "Honoraires rétrocédés"),
     cat("purchases", 8, "Achats"),
     cat("cfe", 12, "Contribution économique territoriale (CFE)"),
     cat("other_taxes", 13, "Autres impôts et taxes"),
