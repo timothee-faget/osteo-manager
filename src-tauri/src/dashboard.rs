@@ -10,10 +10,12 @@ use crate::cheque_deposits;
 use crate::expenses::RETROCESSION;
 use crate::invoices;
 use crate::session::{SessionError, State};
-use crate::sessions::{self, UnbilledSession};
+use crate::sessions::{self, RecentSession, UnbilledSession};
 use crate::settings::{self, BillingSettings};
 
 type Result<T> = std::result::Result<T, SessionError>;
+
+const RECENT_SESSIONS: i64 = 10;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Period {
@@ -58,6 +60,11 @@ pub struct Dashboard {
     /// Draft sessions, oldest first, and their total fees.
     pub unbilled_sessions: Vec<UnbilledSession>,
     pub unbilled_cents: i64,
+    /// Invoices neither sent nor cancelled, and their total.
+    pub unsent_count: i64,
+    pub unsent_cents: i64,
+    /// The latest sessions, newest first, with their billing status.
+    pub recent_sessions: Vec<RecentSession>,
 }
 
 fn iso(d: NaiveDate) -> String {
@@ -161,6 +168,7 @@ pub fn dashboard(conn: &Connection, today: NaiveDate) -> Result<Dashboard> {
     let unpaid = invoices::unpaid(conn, today)?;
     let cheques = cheque_deposits::pending(conn)?;
     let unbilled = sessions::unbilled(conn)?;
+    let unsent = invoices::list_unsent(conn)?;
     Ok(Dashboard {
         month: period(conn, first_of_month(today), today, &rates)?,
         month_last_year: period(conn, first_of_month(last_year), last_year, &rates)?,
@@ -173,6 +181,9 @@ pub fn dashboard(conn: &Connection, today: NaiveDate) -> Result<Dashboard> {
         cheques_to_deposit_cents: cheques.iter().map(|c| c.amount_cents).sum(),
         unbilled_sessions: unbilled.sessions,
         unbilled_cents: unbilled.total_cents,
+        unsent_count: unsent.len() as i64,
+        unsent_cents: unsent.iter().map(|i| i.invoice.amount_cents).sum(),
+        recent_sessions: sessions::recent(conn, RECENT_SESSIONS)?,
     })
 }
 
@@ -301,6 +312,10 @@ mod tests {
             [draft.id]
         );
         assert_eq!(d.unbilled_cents, 6000);
+        // None of the seven invoices was sent.
+        assert_eq!((d.unsent_count, d.unsent_cents), (7, 42000));
+        assert_eq!(d.recent_sessions.len(), 8);
+        assert_eq!(d.recent_sessions[0].starts_at, "2026-10-20T09:00");
         assert_eq!(
             d.by_location,
             [LocationShare {

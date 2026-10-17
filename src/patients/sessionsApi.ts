@@ -1,6 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PaymentStatus } from "../invoices/paymentsApi";
 
+/** Billing progress of a session, most advanced step only. */
+export type SessionStatus =
+  "unbilled" | "invoiced" | "sent" | "partially_paid" | "paid";
+
+export const SESSION_STATUSES: Record<SessionStatus, string> = {
+  unbilled: "Non facturée",
+  invoiced: "Facturée",
+  sent: "Envoyée",
+  partially_paid: "Partiellement payée",
+  paid: "Payée",
+};
+
 export type SessionInput = {
   patient_id: number;
   location_id: number;

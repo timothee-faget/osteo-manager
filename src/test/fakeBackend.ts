@@ -702,6 +702,10 @@ export function fakeBackend(initial: LockStatus) {
           }),
           unbilled_cents: drafts.reduce((t, s) => t + s.fee_cents, 0),
         });
+        const unsentOf = (invoices: InvoiceView[]) => ({
+          unsent_count: invoices.length,
+          unsent_cents: invoices.reduce((t, i) => t + i.amount_cents, 0),
+        });
         return (
           state.dashboard ?? {
             month: emptyPeriod("2026-10-01", "2026-10-17"),
@@ -714,6 +718,32 @@ export function fakeBackend(initial: LockStatus) {
             cheques_to_deposit: 0,
             cheques_to_deposit_cents: 0,
             ...unbilledOf(state.sessions.filter((s) => !s.validated_at)),
+            ...unsentOf(
+              state.invoices.filter((i) => !i.sent_at && !i.credit_note),
+            ),
+            recent_sessions: [...state.sessions]
+              .sort((x, y) => y.starts_at.localeCompare(x.starts_at))
+              .slice(0, 10)
+              .map((s) => {
+                const p = state.patients.find((x) => x.id === s.patient_id);
+                const i = state.invoices.find((x) => x.id === s.invoice_id);
+                const paid = i && withPayments(i).payment_status;
+                return {
+                  session_id: s.id,
+                  patient_id: s.patient_id,
+                  patient_name: p ? `${p.last_name} ${p.first_name}` : "",
+                  starts_at: s.starts_at,
+                  reason: s.reason,
+                  fee_cents: s.fee_cents,
+                  status: !i
+                    ? "unbilled"
+                    : paid !== "unpaid"
+                      ? paid
+                      : i.sent_at
+                        ? "sent"
+                        : "invoiced",
+                };
+              }),
           }
         );
       }
