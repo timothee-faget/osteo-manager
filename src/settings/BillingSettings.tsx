@@ -79,7 +79,12 @@ export function BillingSettings() {
           "%",
           "du CA encaissé moins les charges",
         )}
-        {field("urssaf_provision", "Provision URSSAF", "%", "du CA encaissé")}
+        {field(
+          "urssaf_provision",
+          "Provision URSSAF",
+          "%",
+          "du CA encaissé, net des rétrocessions",
+        )}
         <small>Le tarif reste modifiable séance par séance.</small>
         {feedback}
         <button type="submit" disabled={busy}>
