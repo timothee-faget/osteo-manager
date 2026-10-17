@@ -136,10 +136,23 @@ kbd {
   color: var(--accent-dark);
 }
 
-nav {
+nav,
+nav > div {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+}
+
+nav {
+  gap: 1rem;
+}
+
+.nav-group {
+  margin: 0 0.75rem 0.25rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
 }
 
 nav button,
@@ -159,7 +172,9 @@ nav button:hover:not(:disabled),
 }
 
 nav button[aria-current="page"],
-nav button[aria-current="page"]:hover:not(:disabled) {
+nav button[aria-current="page"]:hover:not(:disabled),
+.sidebar-actions button[aria-current="page"],
+.sidebar-actions button[aria-current="page"]:hover:not(:disabled) {
   background: var(--accent);
   color: var(--on-accent);
 }
