@@ -60,6 +60,13 @@ const MESSAGES: Record<string, string> = {
   invalid_overpayment: "Le montant dépasse le reste à payer.",
   invalid_received_on: "La date d'encaissement est invalide ou dans le futur.",
   invalid_payment: "Paiement introuvable.",
+  invalid_payment_deposited:
+    "Ce chèque a déjà été remis en banque : annulez d'abord sa remise.",
+  invalid_deposit_empty: "Sélectionnez au moins un chèque.",
+  invalid_deposited_on:
+    "La date de dépôt est invalide, dans le futur ou antérieure à un chèque.",
+  invalid_cheque: "Ce chèque n'est plus à remettre.",
+  invalid_deposit: "Remise introuvable.",
   invalid_paid_on: "La date de paiement est invalide ou dans le futur.",
   invalid_supplier: "Le fournisseur est obligatoire.",
   invalid_expense_amount: "Le montant doit être supérieur à zéro.",

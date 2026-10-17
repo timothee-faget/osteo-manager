@@ -297,6 +297,14 @@ pub const MIGRATIONS: &[&str] = &[
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     ) STRICT;",
+    // v10: cheque deposits. A cheque payment is pending until it joins a deposit.
+    "CREATE TABLE cheque_deposit (
+        id INTEGER PRIMARY KEY,
+        deposited_on TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    ) STRICT;
+    ALTER TABLE payment ADD COLUMN deposit_id INTEGER REFERENCES cheque_deposit (id);
+    CREATE INDEX payment_deposit ON payment (deposit_id);",
 ];
 
 #[derive(Debug, thiserror::Error)]

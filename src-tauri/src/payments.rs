@@ -76,9 +76,12 @@ pub struct Payment {
     #[serde(flatten)]
     pub data: PaymentInput,
     pub created_at: String,
+    /// Set once the cheque has been deposited at the bank.
+    pub deposit_id: Option<i64>,
 }
 
-const COLUMNS: &str = "id, invoice_id, amount_cents, method, received_on, reference, created_at";
+const COLUMNS: &str =
+    "id, invoice_id, amount_cents, method, received_on, reference, created_at, deposit_id";
 
 fn from_row(r: &Row) -> rusqlite::Result<Payment> {
     Ok(Payment {
@@ -91,6 +94,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Payment> {
             reference: r.get(5)?,
         },
         created_at: r.get(6)?,
+        deposit_id: r.get(7)?,
     })
 }
 
@@ -167,9 +171,11 @@ fn get(conn: &Connection, id: i64) -> Result<Payment> {
     .ok_or(SessionError::Invalid("payment"))
 }
 
-/// For entry mistakes.
+/// For entry mistakes. A deposited cheque must first be taken out of its deposit.
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
-    get(conn, id)?;
+    if get(conn, id)?.deposit_id.is_some() {
+        return Err(SessionError::Invalid("payment_deposited"));
+    }
     conn.execute("DELETE FROM payment WHERE id = ?1", [id])?;
     Ok(())
 }

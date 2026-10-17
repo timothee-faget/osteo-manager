@@ -14,6 +14,7 @@ import type { InvoiceView } from "../invoices/api";
 import type { Payment } from "../invoices/paymentsApi";
 import type { Category, Due, Expense, Recurring } from "../expenses/api";
 import type { Annuity, AssetYear } from "../fixedAssets/api";
+import type { Cheque, Deposit } from "../collections/api";
 
 // Test files must mock "@tauri-apps/api/core" for `invoke` to be a vi.fn().
 
@@ -65,7 +66,18 @@ export function fakeBackend(initial: LockStatus) {
     /** Fake rule: the register shows every asset, with a fifth of its cost. */
     assets: [] as AssetYear[],
     schedule: [] as Annuity[],
+    /** Cheques by payment id; `deposit` is the deposit id once deposited. */
+    cheques: [] as (Cheque & { deposit: number | null })[],
+    deposits: [] as Deposit[],
   };
+  const strip = (c: (typeof state.cheques)[number]): Cheque => ({
+    payment_id: c.payment_id,
+    received_on: c.received_on,
+    amount_cents: c.amount_cents,
+    reference: c.reference,
+    drawer: c.drawer,
+    invoice_number: c.invoice_number,
+  });
   const assetYear = (a: AssetYear) => ({
     ...a,
     annuity_cents: a.cost_cents / a.duration_years,
@@ -366,6 +378,7 @@ export function fakeBackend(initial: LockStatus) {
           ...a.payment,
           id: state.payments.length + 1,
           created_at: "2026-10-16T10:00:00",
+          deposit_id: null,
         };
         state.payments.push(p);
         return p;
@@ -479,6 +492,37 @@ export function fakeBackend(initial: LockStatus) {
       }
       case "delete_fixed_asset":
         state.assets = state.assets.filter((x) => x.id !== a.id);
+        return;
+      case "list_pending_cheques":
+        return state.cheques.filter((c) => c.deposit === null).map(strip);
+      case "list_cheque_deposits":
+        return [...state.deposits].reverse();
+      case "list_deposit_cheques":
+        return state.cheques.filter((c) => c.deposit === a.id).map(strip);
+      case "create_cheque_deposit": {
+        const id = state.deposits.length + 1;
+        const picked = state.cheques.filter((c) =>
+          a.paymentIds.includes(c.payment_id),
+        );
+        picked.forEach((c) => (c.deposit = id));
+        const d = {
+          id,
+          deposited_on: a.depositedOn,
+          cheque_count: picked.length,
+          total_cents: picked.reduce((t, c) => t + c.amount_cents, 0),
+        };
+        state.deposits.push(d);
+        return d;
+      }
+      case "cancel_cheque_deposit":
+        state.cheques
+          .filter((c) => c.deposit === a.id)
+          .forEach((c) => (c.deposit = null));
+        state.deposits = state.deposits.filter((d) => d.id !== a.id);
+        return;
+      case "get_deposit_slip_pdf":
+        return new Uint8Array([37, 80, 68, 70]).buffer;
+      case "save_deposit_slip_pdf":
         return;
       case "delete_attachment":
         state.attachments = state.attachments.filter((x) => x.id !== a.id);

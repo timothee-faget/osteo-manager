@@ -70,7 +70,9 @@ export function PaymentPanel({
                 <td>{p.reference}</td>
                 <td>{formatEuros(p.amount_cents)}</td>
                 <td>
-                  {confirmDelete === p.id ? (
+                  {p.deposit_id !== null ? (
+                    `Remis en banque (remise n° ${p.deposit_id})`
+                  ) : confirmDelete === p.id ? (
                     <>
                       <button
                         type="button"

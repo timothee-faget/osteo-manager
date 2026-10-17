@@ -1,5 +1,6 @@
 pub mod attachments;
 pub mod backup;
+pub mod cheque_deposits;
 pub mod db;
 pub mod expenses;
 pub mod fixed_assets;
@@ -122,6 +123,13 @@ pub fn run() {
             fixed_assets::create_fixed_asset,
             fixed_assets::update_fixed_asset,
             fixed_assets::delete_fixed_asset,
+            cheque_deposits::list_pending_cheques,
+            cheque_deposits::list_cheque_deposits,
+            cheque_deposits::list_deposit_cheques,
+            cheque_deposits::create_cheque_deposit,
+            cheque_deposits::cancel_cheque_deposit,
+            cheque_deposits::get_deposit_slip_pdf,
+            cheque_deposits::save_deposit_slip_pdf,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

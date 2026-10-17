@@ -31,7 +31,11 @@ export type InvoiceView = {
 };
 
 /** Asks where to save; `false` if the user cancels. */
-async function savePdf(command: string, id: number, defaultPath: string) {
+export async function savePdf(
+  command: string,
+  id: number,
+  defaultPath: string,
+) {
   const path = await save({
     title: "Enregistrer le PDF",
     defaultPath,
