@@ -1392,10 +1392,20 @@ td > button + button {
 .quick-search [role="option"] {
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   min-height: var(--row-h);
   padding: 0 var(--space-3);
   border-radius: var(--radius-sm);
   cursor: pointer;
+}
+
+.quick-search [role="option"] > span {
+  flex: 1;
+}
+
+.quick-search [role="option"] button:not(.link) {
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
 }
 
 .quick-search [role="option"][aria-selected="true"] {

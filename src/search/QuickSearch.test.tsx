@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -132,12 +132,75 @@ test("un numéro de facture ouvre la facture", async () => {
   ).toBeInTheDocument();
 });
 
-test("aucun résultat", async () => {
+test("+ Séance ouvre la fiche avec une nouvelle séance", async () => {
+  const { user, state } = await setup();
+  state.locations.push({
+    id: 1,
+    name: "Cabinet",
+    kind: "practice",
+    address: "",
+    retrocession_rate_bp: 0,
+    archived: false,
+  });
+  await user.keyboard("{Meta>}k{/Meta}");
+  await user.type(
+    screen.getByLabelText("Rechercher un patient ou une facture"),
+    "dup",
+  );
+  const option = await screen.findByRole("option", { name: /DUPONT Anne/ });
+  await user.click(within(option).getByRole("button", { name: "+ Séance" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "DUPONT Anne" }),
+  ).toBeInTheDocument();
+  expect(await screen.findByLabelText("Motif")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("le bouton Fiche ouvre la fiche", async () => {
+  const { user } = await setup();
+  await user.keyboard("{Meta>}k{/Meta}");
+  await user.type(
+    screen.getByLabelText("Rechercher un patient ou une facture"),
+    "dup",
+  );
+  const option = await screen.findByRole("option", { name: /DUPONT Anne/ });
+  await user.click(within(option).getByRole("button", { name: "Fiche" }));
+  expect(
+    await screen.findByRole("heading", { name: "DUPONT Anne" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("Motif")).not.toBeInTheDocument();
+});
+
+test("créer le patient tapé, au clavier", async () => {
+  const { user } = await setup();
+  await user.keyboard("{Meta>}k{/Meta}");
+  await user.type(
+    screen.getByLabelText("Rechercher un patient ou une facture"),
+    "Martin Léa",
+  );
+  const create = await screen.findByRole("option", {
+    name: "+ Créer le patient « Martin Léa »",
+  });
+  expect(create).toHaveAttribute("aria-selected", "true");
+  await user.keyboard("{Enter}");
+
+  expect(
+    await screen.findByRole("heading", { name: "Nouveau patient" }),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Nom")).toHaveValue("Martin");
+  expect(screen.getByLabelText("Prénom")).toHaveValue("Léa");
+});
+
+test("sans résultat, propose de créer le patient", async () => {
   const { user } = await setup();
   await user.keyboard("{Meta>}k{/Meta}");
   await user.type(
     screen.getByLabelText("Rechercher un patient ou une facture"),
     "zzz",
   );
-  expect(await screen.findByText("Aucun résultat.")).toBeInTheDocument();
+  expect(
+    await screen.findByRole("option", { name: "+ Créer le patient « zzz »" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /DUPONT/ })).toBeNull();
 });
