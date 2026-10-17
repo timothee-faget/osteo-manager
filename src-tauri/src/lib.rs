@@ -1,6 +1,7 @@
 pub mod attachments;
 pub mod backup;
 pub mod db;
+pub mod expenses;
 pub mod invoices;
 pub mod patients;
 pub mod payments;
@@ -101,6 +102,20 @@ pub fn run() {
             payments::add_payment,
             payments::delete_payment,
             search::quick_search,
+            expenses::list_expense_categories,
+            expenses::list_expenses,
+            expenses::create_expense,
+            expenses::update_expense,
+            expenses::delete_expense,
+            expenses::set_expense_receipt,
+            expenses::remove_expense_receipt,
+            expenses::read_expense_receipt,
+            expenses::list_recurring_expenses,
+            expenses::create_recurring_expense,
+            expenses::update_recurring_expense,
+            expenses::archive_recurring_expense,
+            expenses::due_recurring_expenses,
+            expenses::skip_recurring_expense,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

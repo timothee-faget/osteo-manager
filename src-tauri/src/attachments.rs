@@ -31,7 +31,7 @@ pub struct Attachment {
 }
 
 /// Detects the type from the content, not the extension. `None` if not accepted.
-fn sniff(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn sniff(bytes: &[u8]) -> Option<&'static str> {
     let at = |offset: usize, magic: &[u8]| bytes.get(offset..offset + magic.len()) == Some(magic);
     if at(0, b"%PDF-") {
         Some("application/pdf")
@@ -68,6 +68,56 @@ fn from_row(r: &Row) -> rusqlite::Result<Attachment> {
 
 const COLUMNS: &str = "id, patient_id, file_name, mime, size, added_at";
 
+/// A file encrypted in a directory under a random name, bound to that name by the AEAD.
+/// The key and nonce go in the database row that owns the file.
+pub(crate) struct Sealed {
+    pub storage_name: String,
+    pub key: [u8; 32],
+    pub nonce: XNonce,
+}
+
+pub(crate) fn seal(dir: &Path, bytes: &[u8]) -> std::io::Result<Sealed> {
+    let storage_name = hex::encode(<[u8; 16]>::generate());
+    let key = <[u8; 32]>::generate();
+    let nonce = XNonce::generate();
+    let ciphertext = XChaCha20Poly1305::new(&key.into())
+        .encrypt(
+            &nonce,
+            Payload {
+                msg: bytes,
+                aad: storage_name.as_bytes(),
+            },
+        )
+        .expect("encryption with a valid key cannot fail");
+
+    fs::create_dir_all(dir)?;
+    let path = dir.join(&storage_name);
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, ciphertext)?;
+    fs::rename(&tmp, &path)?;
+    Ok(Sealed {
+        storage_name,
+        key,
+        nonce,
+    })
+}
+
+/// `None` if the file is missing, tampered with or not the one these keys were made for.
+pub(crate) fn unseal(dir: &Path, storage_name: &str, key: &[u8], nonce: &[u8]) -> Option<Vec<u8>> {
+    let key: [u8; 32] = key.try_into().ok()?;
+    let nonce = XNonce::try_from(nonce).ok()?;
+    let ciphertext = fs::read(dir.join(storage_name)).ok()?;
+    XChaCha20Poly1305::new(&key.into())
+        .decrypt(
+            &nonce,
+            Payload {
+                msg: &ciphertext,
+                aad: storage_name.as_bytes(),
+            },
+        )
+        .ok()
+}
+
 /// Encrypts `bytes` into `dir` and records it for the patient.
 pub fn add(
     conn: &Connection,
@@ -89,24 +139,9 @@ pub fn add(
         return Err(SessionError::Invalid("patient"));
     }
 
-    let storage_name = hex::encode(<[u8; 16]>::generate());
-    let key = <[u8; 32]>::generate();
-    let nonce = XNonce::generate();
-    let ciphertext = XChaCha20Poly1305::new(&key.into())
-        .encrypt(
-            &nonce,
-            Payload {
-                msg: bytes,
-                aad: storage_name.as_bytes(),
-            },
-        )
-        .expect("encryption with a valid key cannot fail");
-
-    fs::create_dir_all(dir)?;
-    let path = dir.join(&storage_name);
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, ciphertext)?;
-    fs::rename(&tmp, &path)?;
+    let sealed = seal(dir, bytes)?;
+    let (storage_name, key, nonce) = (&sealed.storage_name, sealed.key, sealed.nonce);
+    let path = dir.join(storage_name);
 
     let inserted = conn.execute(
         "INSERT INTO attachment (patient_id, file_name, mime, size, storage_name, key, nonce, added_at)
@@ -156,19 +191,8 @@ pub fn read(conn: &Connection, dir: &Path, id: i64) -> Result<(Attachment, Vec<u
         [id],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
-    let corrupt = || SessionError::Invalid("attachment_file");
-    let key: [u8; 32] = key.try_into().map_err(|_| corrupt())?;
-    let nonce = XNonce::try_from(nonce.as_slice()).map_err(|_| corrupt())?;
-    let ciphertext = fs::read(dir.join(&storage_name)).map_err(|_| corrupt())?;
-    let bytes = XChaCha20Poly1305::new(&key.into())
-        .decrypt(
-            &nonce,
-            Payload {
-                msg: &ciphertext,
-                aad: storage_name.as_bytes(),
-            },
-        )
-        .map_err(|_| corrupt())?;
+    let bytes =
+        unseal(dir, &storage_name, &key, &nonce).ok_or(SessionError::Invalid("attachment_file"))?;
     Ok((attachment, bytes))
 }
 

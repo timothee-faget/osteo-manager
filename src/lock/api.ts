@@ -60,6 +60,18 @@ const MESSAGES: Record<string, string> = {
   invalid_overpayment: "Le montant dépasse le reste à payer.",
   invalid_received_on: "La date d'encaissement est invalide ou dans le futur.",
   invalid_payment: "Paiement introuvable.",
+  invalid_paid_on: "La date de paiement est invalide ou dans le futur.",
+  invalid_supplier: "Le fournisseur est obligatoire.",
+  invalid_expense_amount: "Le montant doit être supérieur à zéro.",
+  invalid_category: "Choisissez une catégorie.",
+  invalid_expense: "Dépense introuvable.",
+  invalid_receipt: "Cette dépense n'a pas de justificatif.",
+  invalid_receipt_file: "Le justificatif est illisible ou endommagé.",
+  invalid_label: "Le libellé est obligatoire.",
+  invalid_day_of_month: "Le jour de paiement doit être compris entre 1 et 31.",
+  invalid_start_month: "Mois de début invalide.",
+  invalid_recurring_expense: "Charge récurrente introuvable.",
+  invalid_recurring_month: "Ce mois est déjà enregistré ou ignoré.",
 };
 
 /** Maps a `{ code }` error from a Rust command to a French message. */

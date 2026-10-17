@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ExpensesPage } from "./expenses/ExpensesPage";
 import { QuickSearch } from "./search/QuickSearch";
 import { lockApi } from "./lock/api";
 import { useIdle } from "./lock/useIdle";
@@ -6,12 +7,13 @@ import { InvoicesPage } from "./invoices/InvoicesPage";
 import { PatientsPage } from "./patients/PatientsPage";
 import { SettingsPage } from "./settings/SettingsPage";
 
-type Page = "home" | "patients" | "invoices" | "settings";
+type Page = "home" | "patients" | "invoices" | "expenses" | "settings";
 
 const PAGES: Record<Page, string> = {
   home: "Accueil",
   patients: "Patients",
   invoices: "Factures",
+  expenses: "Dépenses",
   settings: "Paramètres",
 };
 
@@ -86,6 +88,7 @@ function Home({
         {page === "invoices" && (
           <InvoicesPage key={target?.seq} openInvoiceId={target?.id} />
         )}
+        {page === "expenses" && <ExpensesPage />}
         {page === "settings" && autoLock !== null && (
           <SettingsPage
             autoLock={autoLock}
