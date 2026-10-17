@@ -12,16 +12,6 @@ import {
   type SessionInput,
 } from "./sessionsApi";
 
-type NoteKey = "reason" | "anamnesis" | "examination" | "treatment" | "advice";
-
-const NOTES: { key: NoteKey; label: string }[] = [
-  { key: "reason", label: "Motif" },
-  { key: "anamnesis", label: "Contexte / anamnèse" },
-  { key: "examination", label: "Examen / constatations" },
-  { key: "treatment", label: "Traitement effectué" },
-  { key: "advice", label: "Conseils donnés" },
-];
-
 type Draft = Omit<SessionInput, "fee_cents"> & { fee: string };
 
 function toDraft(s: SessionInput): Draft {
@@ -30,7 +20,7 @@ function toDraft(s: SessionInput): Draft {
 }
 
 /**
- * Creates or edits a session. Once invoiced, only the clinical notes can change.
+ * Creates or edits a session. Once invoiced, only the reason and the notes can change.
  * `onDone` receives the saved session, or `null` after a deletion.
  */
 export function SessionForm({
@@ -68,10 +58,7 @@ export function SessionForm({
           location_id,
           starts_at: nowLocal(),
           reason: "",
-          anamnesis: "",
-          examination: "",
-          treatment: "",
-          advice: "",
+          notes: "",
           fee: centsToInput(fee),
         });
       }
@@ -149,7 +136,7 @@ export function SessionForm({
         </h4>
         {invoiced && (
           <p>
-            Séance facturée : seules les notes cliniques restent modifiables.
+            Séance facturée : seuls le motif et les notes restent modifiables.
           </p>
         )}
         <label>
@@ -175,16 +162,21 @@ export function SessionForm({
             ))}
           </select>
         </label>
-        {NOTES.map(({ key, label }) => (
-          <label key={key}>
-            {label}
-            <textarea
-              rows={key === "reason" ? 1 : 3}
-              value={draft[key]}
-              onChange={(e) => set({ [key]: e.target.value })}
-            />
-          </label>
-        ))}
+        <label>
+          Motif
+          <input
+            value={draft.reason}
+            onChange={(e) => set({ reason: e.target.value })}
+          />
+        </label>
+        <label>
+          Notes
+          <textarea
+            rows={12}
+            value={draft.notes}
+            onChange={(e) => set({ notes: e.target.value })}
+          />
+        </label>
         {invoiced ? (
           <p>Tarif : {draft.fee} €</p>
         ) : (

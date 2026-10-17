@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "../lock/api";
 import {
+  ageOn,
   CIVILITIES,
   EMPTY_PATIENT,
   formatDate,
@@ -10,7 +11,7 @@ import {
   type PatientSummary,
 } from "./api";
 import { AttachmentsSection } from "./AttachmentsSection";
-import { PatientForm } from "./PatientForm";
+import { ClinicalNotesForm, IdentityForm } from "./PatientForm";
 import { SessionsSection } from "./SessionsSection";
 
 type View =
@@ -68,12 +69,15 @@ export function PatientsPage({
             ← Patients
           </button>
           <h2>Nouveau patient</h2>
-          <PatientForm
+          <IdentityForm
             initial={fromName(view.name)}
             isMinor={false}
             submitLabel="Créer la fiche"
-            onSubmit={async (input) => {
-              const p = await patientsApi.create(input);
+            onSubmit={async (patch) => {
+              const p = await patientsApi.create({
+                ...EMPTY_PATIENT,
+                ...patch,
+              });
               // A new patient is almost always seen right away.
               setView({ kind: "edit", id: p.id, newSession: true });
               return p;
@@ -168,6 +172,13 @@ function PatientList({
   );
 }
 
+/** "Mme DUPONT Anne" */
+function fullName(p: Patient) {
+  const name = `${p.last_name.toUpperCase()} ${p.first_name}`;
+  return p.civility ? `${CIVILITIES[p.civility]} ${name}` : name;
+}
+
+/** The record during a consultation: sessions on the left, clinical notes on the right. */
 function PatientRecord({
   id,
   newSession,
@@ -180,6 +191,7 @@ function PatientRecord({
   onBack: () => void;
 }) {
   const [patient, setPatient] = useState<Patient | null>(null);
+  const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -196,6 +208,11 @@ function PatientRecord({
   }
 
   if (!patient) return null;
+  const update = async (patch: Partial<PatientInput>) => {
+    const p = await patientsApi.update(id, { ...patient, ...patch });
+    setPatient(p);
+    return p;
+  };
   return (
     <section>
       <button type="button" className="link" onClick={onBack}>
@@ -203,35 +220,88 @@ function PatientRecord({
       </button>
       <header>
         <h2>
-          {patient.last_name.toUpperCase()} {patient.first_name}
+          {fullName(patient)}
           {patient.is_minor && <span className="badge">Mineur</span>}
         </h2>
-        <button type="button" onClick={() => void exportRecord(patient)}>
-          Exporter le dossier (RGPD)
-        </button>
+        <div className="actions">
+          <button
+            type="button"
+            aria-expanded={editing}
+            onClick={() => setEditing(!editing)}
+          >
+            Modifier la fiche
+          </button>
+          <button type="button" onClick={() => void exportRecord(patient)}>
+            Exporter le dossier (RGPD)
+          </button>
+        </div>
       </header>
+      <PatientFacts patient={patient} />
       {message && <p role="status">{message}</p>}
-      {/* A session being edited goes full width above the record (CSS). */}
+      {editing && (
+        <div className="card">
+          <IdentityForm
+            initial={patient}
+            isMinor={patient.is_minor}
+            submitLabel="Enregistrer la fiche"
+            onSubmit={update}
+          />
+        </div>
+      )}
       <div className="record-grid">
-        <PatientForm
-          initial={patient}
-          isMinor={patient.is_minor}
-          submitLabel="Enregistrer"
-          onSubmit={async (input) => {
-            const p = await patientsApi.update(id, input);
-            setPatient(p);
-            return p;
-          }}
-          attachments={<AttachmentsSection patientId={patient.id} />}
-        />
-        <div className="card sessions">
+        <div className="card">
           <SessionsSection
             patientId={patient.id}
             startNew={newSession}
             openSessionId={sessionId}
           />
         </div>
+        <div className="record-side">
+          <div className="card">
+            <ClinicalNotesForm initial={patient} onSubmit={update} />
+          </div>
+          <div className="card">
+            <AttachmentsSection patientId={patient.id} />
+          </div>
+        </div>
       </div>
     </section>
+  );
+}
+
+/** Civil details at a glance, empty ones left out. */
+function PatientFacts({ patient: p }: { patient: Patient }) {
+  const lines = [
+    [
+      p.birth_date &&
+        `${ageOn(p.birth_date)} ans (${formatDate(p.birth_date)})`,
+      p.phone,
+      p.email,
+    ],
+    [
+      p.profession,
+      p.sport,
+      p.general_practitioner && `Médecin traitant : ${p.general_practitioner}`,
+    ],
+    p.guardians.map(
+      (g) =>
+        `Représentant : ${[
+          g.name,
+          g.relationship && `(${g.relationship})`,
+          g.phone,
+        ]
+          .filter(Boolean)
+          .join(" ")}`,
+    ),
+  ]
+    .map((line) => line.filter(Boolean).join(" · "))
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  return (
+    <div className="patient-facts">
+      {lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
   );
 }

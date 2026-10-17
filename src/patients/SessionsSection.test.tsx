@@ -108,22 +108,28 @@ test("tarif pré-rempli selon le lieu, séance enregistrée en brouillon", async
   await user.selectOptions(s.getByLabelText("Lieu"), "Cabinet");
   expect(await s.findByDisplayValue("60,00")).toBeInTheDocument();
 
-  await user.type(s.getByLabelText("Traitement effectué"), "Ttt iliaque D");
+  await user.type(
+    s.getByLabelText("Notes"),
+    "Ttt iliaque D{Enter}Revoir dans 3 semaines",
+  );
   await user.clear(s.getByLabelText("Date et heure"));
   await user.type(s.getByLabelText("Date et heure"), "2026-10-16T09:30");
   await user.click(s.getByRole("button", { name: "Enregistrer" }));
 
   expect(await s.findByRole("status")).toHaveTextContent("Séance enregistrée.");
-  const row = s
+  const item = s
     .getByRole("button", { name: "16/10/2026 à 09:30" })
-    .closest("tr")!;
-  expect(within(row).getByText("Lombalgie")).toBeInTheDocument();
-  expect(within(row).getByText("60,00 €")).toBeInTheDocument();
-  expect(within(row).getByText("Non facturée")).toBeInTheDocument();
+    .closest("li")!;
+  expect(within(item).getByText("Lombalgie")).toBeInTheDocument();
+  expect(within(item).getByText("60,00 € · Non facturée")).toBeInTheDocument();
+  // The history shows the whole note.
+  expect(
+    within(item).getByText("Ttt iliaque D Revoir dans 3 semaines"),
+  ).toBeInTheDocument();
   expect(state.sessions[0]).toMatchObject({
     location_id: 1,
     fee_cents: 6000,
-    treatment: "Ttt iliaque D",
+    notes: "Ttt iliaque D\nRevoir dans 3 semaines",
   });
 });
 
@@ -147,7 +153,7 @@ test("valider émet la facture après confirmation et verrouille la facturation"
   expect(await s.findByRole("status")).toHaveTextContent(
     "Facture 2026-10-001 émise.",
   );
-  expect(s.getByText("2026-10-001 · Impayée")).toBeInTheDocument();
+  expect(s.getByText("60,00 € · 2026-10-001 · Impayée")).toBeInTheDocument();
   expect(state.sessions[0].validated_at).not.toBeNull();
 
   // The session stays open, locked for billing, with the payment form.
@@ -162,10 +168,10 @@ test("valider émet la facture après confirmation et verrouille la facturation"
     s.queryByRole("button", { name: "Supprimer" }),
   ).not.toBeInTheDocument();
 
-  await user.type(s.getByLabelText("Examen / constatations"), "Restriction L5");
+  await user.type(s.getByLabelText("Notes"), "Restriction L5");
   await user.click(s.getByRole("button", { name: "Enregistrer" }));
   expect(await s.findByRole("status")).toHaveTextContent("Séance enregistrée.");
-  expect(state.sessions[0].examination).toBe("Restriction L5");
+  expect(state.sessions[0].notes).toBe("Restriction L5");
 });
 
 test("validation refusée si l'identité de la praticienne est incomplète", async () => {
@@ -236,7 +242,9 @@ test("encaissement juste après la facturation", async () => {
   await user.click(s.getByRole("button", { name: "Enregistrer le paiement" }));
   expect(await s.findByText("Paiement : Payée")).toBeInTheDocument();
   expect(s.queryByLabelText("Montant encaissé")).not.toBeInTheDocument();
-  expect(await s.findByText("2026-10-001 · Payée")).toBeInTheDocument();
+  expect(
+    await s.findByText("60,00 € · 2026-10-001 · Payée"),
+  ).toBeInTheDocument();
   expect(state.payments.map((p) => [p.amount_cents, p.method])).toEqual([
     [4000, "cash"],
     [2000, "cheque"],

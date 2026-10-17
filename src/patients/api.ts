@@ -108,3 +108,12 @@ export function formatDate(iso: string | null) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+
+/** Age in full years on `today`, from a `YYYY-MM-DD` birth date. */
+export function ageOn(birth: string, today = new Date()) {
+  const [y, m, d] = birth.split("-").map(Number);
+  const month = today.getMonth() + 1;
+  const beforeBirthday =
+    month < m || (month === m && today.getDate() < d) ? 1 : 0;
+  return today.getFullYear() - y - beforeBirthday;
+}

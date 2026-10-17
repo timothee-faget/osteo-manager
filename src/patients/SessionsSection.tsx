@@ -79,41 +79,32 @@ export function SessionsSection({
       {sessions.length === 0 ? (
         <p>Aucune séance.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Motif</th>
-              <th>Tarif</th>
-              <th>Facture</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map((s) => (
-              <tr key={s.id}>
-                <td>
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => {
-                      setMessage(null);
-                      setEditing(s);
-                    }}
-                  >
-                    {formatDateTime(s.starts_at)}
-                  </button>
-                </td>
-                <td>{s.reason}</td>
-                <td>{formatEuros(s.fee_cents)}</td>
-                <td>
+        <ol className="session-history">
+          {sessions.map((s) => (
+            <li key={s.id}>
+              <header>
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    setMessage(null);
+                    setEditing(s);
+                  }}
+                >
+                  {formatDateTime(s.starts_at)}
+                </button>
+                {s.reason && <span className="session-reason">{s.reason}</span>}
+                <span className="session-billing">
+                  {formatEuros(s.fee_cents)} ·{" "}
                   {s.invoice_number
                     ? `${s.invoice_number} · ${PAYMENT_STATUSES[s.payment_status ?? "unpaid"]}`
                     : "Non facturée"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </span>
+              </header>
+              {s.notes && <p className="session-notes">{s.notes}</p>}
+            </li>
+          ))}
+        </ol>
       )}
     </section>
   );

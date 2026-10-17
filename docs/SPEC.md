@@ -42,12 +42,13 @@ Calquées sur ses fiches Word actuelles (voir [legacy-data.md](legacy-data.md)) 
 - **Revue des systèmes** (texte libre) : ORL, cardio-pulmonaire, digestif, gynécologique, hygiène de vie.
 - Historique des séances (voir 3.3).
 - **Pièces jointes** (radios, ordonnances, comptes-rendus) stockées chiffrées.
+- **Vue consultation** : bandeau compact des infos civiles (modifiables via « Modifier la fiche ») ; à gauche la séance en cours puis les séances passées avec leur note complète ; à droite les antécédents et la revue des systèmes, toujours éditables, puis les pièces jointes.
 - _Futur_ : schéma du corps annotable.
 - RGPD : export complet d'un dossier patient ; conservation longue (archivage, pas de suppression automatique).
 
 ### 3.3 Séances
 
-- Date et heure, lieu, motif, contexte / anamnèse, examen / constatations, traitement effectué, conseils donnés.
+- Date et heure, lieu, motif et une note libre unique.
 - Tarif pré-rempli selon le lieu (standard ou domicile), modifiable.
 - **Valider une séance génère automatiquement la facture** (sans l'envoyer).
 

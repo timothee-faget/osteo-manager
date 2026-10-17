@@ -90,9 +90,8 @@ impl Fixture {
             location_id: self.practice,
             starts_at: starts_at.into(),
             reason: "Lombalgie".into(),
-            treatment: "Ttt iliaque D".into(),
+            notes: "Ttt iliaque D".into(),
             fee_cents: 6000,
-            ..Default::default()
         }
     }
 

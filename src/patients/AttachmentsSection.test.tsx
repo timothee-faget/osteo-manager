@@ -32,7 +32,6 @@ async function setup() {
   await user.type(screen.getByLabelText("Nom"), "Dupont");
   await user.type(screen.getByLabelText("Prénom"), "Anne");
   await user.click(screen.getByRole("button", { name: "Créer la fiche" }));
-  await user.click(await screen.findByRole("tab", { name: "Pièces jointes" }));
   const heading = await screen.findByRole("heading", {
     name: "Pièces jointes",
   });
