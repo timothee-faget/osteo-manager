@@ -99,7 +99,7 @@ pub enum ExpenseMethod {
 }
 
 impl ExpenseMethod {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Card => "card",
             Self::DirectDebit => "direct_debit",

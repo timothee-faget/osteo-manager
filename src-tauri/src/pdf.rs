@@ -1,4 +1,4 @@
-//! Invoice, credit note and cheque deposit PDFs (A4), rendered with krilla. Invoices and
+//! Invoice, credit note, cheque deposit and report PDFs (A4), rendered with krilla. Invoices and
 //! credit notes are drawn from their immutable snapshots.
 //! The Inter font (SIL OFL, see `fonts/Inter-LICENSE.txt`) is embedded, subsetted.
 
@@ -399,15 +399,16 @@ const SLIP_ROWS_NEXT: usize = 36;
 
 /// Which rows go on each page; there is always a first page.
 fn slip_pages(rows: usize) -> Vec<std::ops::Range<usize>> {
+    paginate(rows, SLIP_ROWS_FIRST, SLIP_ROWS_NEXT)
+}
+
+/// Splits `rows` into pages holding `first` rows, then `next` rows each.
+fn paginate(rows: usize, first: usize, next: usize) -> Vec<std::ops::Range<usize>> {
     let mut pages = Vec::new();
     let mut start = 0;
     loop {
-        let size = if pages.is_empty() {
-            SLIP_ROWS_FIRST
-        } else {
-            SLIP_ROWS_NEXT
-        };
-        let end = rows.min(start + size);
+        let size = if pages.is_empty() { first } else { next };
+        let end = rows.min(start + size.max(1));
         pages.push(start..end);
         if end == rows {
             return pages;
@@ -492,6 +493,125 @@ pub fn deposit_slip(slip: &DepositSlip) -> Vec<u8> {
             c.text(MARGIN, y, 11.0, true, &label);
             c.text_right(RIGHT - 90.0, y, 11.0, true, "Total");
             c.text_right(RIGHT, y, 11.0, true, &euros(total));
+        }
+        c.muted(|c| {
+            c.text_right(
+                RIGHT,
+                PAGE_H - MARGIN / 2.0,
+                8.5,
+                false,
+                &format!("Page {}/{count}", i + 1),
+            )
+        });
+        surface.finish();
+        page.finish();
+    }
+    document.finish().expect("the document is valid")
+}
+
+/// A column of a report table.
+pub struct Column {
+    pub label: &'static str,
+    pub width: f32,
+    /// Right-aligned (amounts).
+    pub right: bool,
+}
+
+pub struct ReportRow {
+    pub cells: Vec<String>,
+    /// Section headings and totals.
+    pub bold: bool,
+}
+
+/// A titled table, continued on further pages when long (journal, tax summary…).
+pub struct Report {
+    pub title: String,
+    pub subtitle: Vec<String>,
+    pub columns: Vec<Column>,
+    pub rows: Vec<ReportRow>,
+    /// Printed under the table, on the last page.
+    pub notes: Vec<String>,
+}
+
+const ROW_H: f32 = 16.0;
+
+impl Canvas<'_, '_> {
+    /// Draws `text`, shortened with an ellipsis to fit `width`.
+    fn text_fit(&mut self, x: f32, y: f32, size: f32, bold: bool, width: f32, text: &str) {
+        let face = self.face(bold);
+        if face.width(size, text) <= width {
+            return self.text(x, y, size, bold, text);
+        }
+        let mut cut: String = text.to_string();
+        while !cut.is_empty() && face.width(size, &format!("{cut}…")) > width {
+            cut.pop();
+        }
+        self.text(x, y, size, bold, &format!("{}…", cut.trim_end()));
+    }
+
+    fn report_row(&mut self, columns: &[Column], y: f32, bold: bool, cells: &[String]) {
+        let mut x = MARGIN;
+        for (col, cell) in columns.iter().zip(cells) {
+            if col.right {
+                self.text_right(x + col.width, y, 9.0, bold, cell);
+            } else {
+                self.text_fit(x, y, 9.0, bold, col.width - 6.0, cell);
+            }
+            x += col.width;
+        }
+    }
+}
+
+pub fn report(r: &Report) -> Vec<u8> {
+    let mut document = Document::new();
+    document.set_metadata(
+        Metadata::new()
+            .title(r.title.clone())
+            .creator("Osteo Manager".into())
+            .language("fr".into()),
+    );
+    let first_top = MARGIN + 18.0 + 22.0 + 13.0 * r.subtitle.len() as f32 + 10.0;
+    let next_top = MARGIN + 18.0 + 16.0;
+    let bottom = PAGE_H - MARGIN - 13.0 * r.notes.len() as f32 - 12.0;
+    let capacity = |top: f32| ((bottom - top - 24.0) / ROW_H) as usize;
+    let pages = paginate(r.rows.len(), capacity(first_top), capacity(next_top));
+    let count = pages.len();
+    for (i, rows) in pages.into_iter().enumerate() {
+        let mut page =
+            document.start_page_with(PageSettings::from_wh(PAGE_W, PAGE_H).expect("A4 size"));
+        let mut surface = page.surface();
+        let mut c = Canvas {
+            surface: &mut surface,
+            regular: Face::new(REGULAR),
+            bold: Face::new(SEMIBOLD),
+        };
+        let mut y = MARGIN + 18.0;
+        if i == 0 {
+            c.text(MARGIN, y, 16.0, true, &r.title);
+            y += 22.0;
+            for line in &r.subtitle {
+                c.muted(|c| c.text(MARGIN, y, 9.5, false, line));
+                y += 13.0;
+            }
+            y = first_top;
+        } else {
+            c.muted(|c| c.text(MARGIN, y, 9.5, false, &format!("{} (suite)", r.title)));
+            y = next_top;
+        }
+        let labels: Vec<String> = r.columns.iter().map(|c| c.label.to_string()).collect();
+        c.report_row(&r.columns, y, true, &labels);
+        c.rule(y + 6.0);
+        y += 22.0;
+        for row in &r.rows[rows] {
+            c.report_row(&r.columns, y, row.bold, &row.cells);
+            y += ROW_H;
+        }
+        if i + 1 == count {
+            y += 8.0;
+            for note in &r.notes {
+                c.muted(|c| c.text(MARGIN, y, 8.5, false, note));
+                y += 13.0;
+            }
         }
         c.muted(|c| {
             c.text_right(
@@ -630,6 +750,52 @@ mod tests {
         }
     }
 
+    fn sample_report(rows: usize) -> Report {
+        Report {
+            title: "Livre-journal 2026".into(),
+            subtitle: vec!["Claire Martin".into()],
+            columns: vec![
+                Column {
+                    label: "Date",
+                    width: 70.0,
+                    right: false,
+                },
+                Column {
+                    label: "Libellé",
+                    width: 330.0,
+                    right: false,
+                },
+                Column {
+                    label: "Montant",
+                    width: 83.0,
+                    right: true,
+                },
+            ],
+            rows: (0..rows)
+                .map(|i| ReportRow {
+                    cells: vec![
+                        "16/10/2026".into(),
+                        format!(
+                            "Honoraires, facture 2026-10-{i:03} {}",
+                            "très long ".repeat(20)
+                        ),
+                        euros(6000),
+                    ],
+                    bold: i == rows - 1,
+                })
+                .collect(),
+            notes: vec!["Synthèse indicative.".into()],
+        }
+    }
+
+    #[test]
+    fn report_renders_long_tables() {
+        for rows in [1, 200] {
+            assert!(report(&sample_report(rows)).starts_with(b"%PDF-"));
+        }
+        assert_eq!(paginate(5, 2, 3), [0..2, 2..5]);
+    }
+
     #[test]
     fn unreadable_logo_is_skipped() {
         let broken = Logo {
@@ -660,5 +826,6 @@ mod tests {
         )
         .unwrap();
         std::fs::write(format!("{dir}/deposit.pdf"), deposit_slip(&slip(45))).unwrap();
+        std::fs::write(format!("{dir}/report.pdf"), report(&sample_report(60))).unwrap();
     }
 }

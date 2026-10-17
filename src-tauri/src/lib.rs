@@ -1,3 +1,4 @@
+pub mod accounting;
 pub mod attachments;
 pub mod backup;
 pub mod cheque_deposits;
@@ -131,6 +132,9 @@ pub fn run() {
             cheque_deposits::cancel_cheque_deposit,
             cheque_deposits::get_deposit_slip_pdf,
             cheque_deposits::save_deposit_slip_pdf,
+            accounting::get_journal,
+            accounting::get_tax_summary,
+            accounting::export_accounting,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
