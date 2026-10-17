@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useSave } from "../settings/useSave";
 import {
   CIVILITIES,
@@ -41,6 +41,15 @@ const SYSTEMS: Field[] = [
   { key: "lifestyle", label: "Hygiène de vie", multiline: true },
 ];
 
+const TABS = {
+  identification: "Identification",
+  history: "Antécédents",
+  systems: "Revue des systèmes",
+  attachments: "Pièces jointes",
+};
+
+type Tab = keyof typeof TABS;
+
 const EMPTY_GUARDIAN: Guardian = {
   name: "",
   relationship: "",
@@ -48,19 +57,23 @@ const EMPTY_GUARDIAN: Guardian = {
   email: "",
 };
 
+/** The record in tabs; `attachments` adds their tab (saved records only). */
 export function PatientForm({
   initial,
   isMinor,
   submitLabel,
   onSubmit,
+  attachments,
 }: {
   initial: PatientInput;
   /** From the saved record; the section also opens when guardians exist. */
   isMinor: boolean;
   submitLabel: string;
   onSubmit: (input: PatientInput) => Promise<Patient>;
+  attachments?: ReactNode;
 }) {
   const [form, setForm] = useState(initial);
+  const [tab, setTab] = useState<Tab>("identification");
   const { busy, save, feedback } = useSave();
 
   const set = (patch: Partial<PatientInput>) => setForm({ ...form, ...patch });
@@ -100,10 +113,9 @@ export function PatientForm({
     }, "Fiche enregistrée.");
   }
 
-  return (
-    <form className="patient-form" onSubmit={(e) => void submit(e)}>
-      <fieldset>
-        <legend>Identification</legend>
+  const identification = (
+    <>
+      <div className="fields">
         <label>
           Civilité
           <select
@@ -130,7 +142,7 @@ export function PatientForm({
           />
         </label>
         {fields(IDENTIFICATION.slice(2))}
-      </fieldset>
+      </div>
 
       <details open={isMinor || form.guardians.length > 0}>
         <summary>Patient mineur : représentants légaux</summary>
@@ -195,21 +207,46 @@ export function PatientForm({
           />
         </label>
       </details>
+    </>
+  );
 
-      <fieldset>
-        <legend>Antécédents</legend>
-        {fields(HISTORY)}
-      </fieldset>
+  const tabs = (Object.keys(TABS) as Tab[]).filter(
+    (t) => t !== "attachments" || attachments,
+  );
 
-      <fieldset>
-        <legend>Revue des systèmes</legend>
-        {fields(SYSTEMS)}
-      </fieldset>
-
-      {feedback}
-      <button type="submit" disabled={busy}>
-        {submitLabel}
-      </button>
-    </form>
+  return (
+    <div className="card">
+      <div className="tabs" role="tablist" aria-label="Fiche patient">
+        {tabs.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+          >
+            {TABS[t]}
+          </button>
+        ))}
+      </div>
+      {tab === "attachments" ? (
+        attachments
+      ) : (
+        <form
+          className="patient-form"
+          role="tabpanel"
+          aria-label={TABS[tab]}
+          onSubmit={(e) => void submit(e)}
+        >
+          {tab === "identification" && identification}
+          {tab === "history" && <div className="fields">{fields(HISTORY)}</div>}
+          {tab === "systems" && <div className="fields">{fields(SYSTEMS)}</div>}
+          {feedback}
+          <button type="submit" disabled={busy}>
+            {submitLabel}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }

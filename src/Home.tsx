@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon, type IconName } from "./icons";
 import { AccountingPage } from "./accounting/AccountingPage";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { CollectionsPage } from "./collections/CollectionsPage";
@@ -30,6 +31,17 @@ const PAGES: Record<Page, string> = {
   assets: "Immobilisations",
   accounting: "Comptabilité",
   settings: "Paramètres",
+};
+
+const ICONS: Record<Page, IconName> = {
+  home: "home",
+  patients: "users",
+  invoices: "file",
+  collections: "wallet",
+  expenses: "receipt",
+  assets: "package",
+  accounting: "book",
+  settings: "settings",
 };
 
 /** Daily pages first; bookkeeping below; settings sit with the other actions. */
@@ -88,7 +100,12 @@ function Home({
   return (
     <div className="app">
       <aside className="sidebar">
-        <h1 className="brand">Osteo Manager</h1>
+        <h1 className="brand">
+          <span className="brand-mark">
+            <Icon name="spine" />
+          </span>
+          Osteo Manager
+        </h1>
         <nav aria-label="Navigation">
           {NAV.map(([group, pages]) => (
             <div key={group} role="group" aria-label={group}>
@@ -100,6 +117,7 @@ function Home({
                   aria-current={page === p ? "page" : undefined}
                   onClick={() => go(p)}
                 >
+                  <Icon name={ICONS[p]} />
                   {PAGES[p]}
                 </button>
               ))}
@@ -112,12 +130,15 @@ function Home({
             aria-current={page === "settings" ? "page" : undefined}
             onClick={() => go("settings")}
           >
+            <Icon name={ICONS.settings} />
             {PAGES.settings}
           </button>
           <button type="button" onClick={() => setSearching(true)}>
+            <Icon name="search" />
             Rechercher <kbd>⌘K</kbd>
           </button>
           <button type="button" onClick={onLock}>
+            <Icon name="lock" />
             Verrouiller
           </button>
         </div>

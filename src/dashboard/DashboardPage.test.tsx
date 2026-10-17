@@ -52,29 +52,35 @@ test("bilan résumé, à traiter et détail dans Comptabilité", async () => {
     unsent_cents: 0,
     recent_sessions: [],
   };
+  state.practitioner.first_name = "Camille";
   render(<App />);
 
+  expect(
+    await screen.findByRole("heading", { name: "Bonjour, Camille" }),
+  ).toBeInTheDocument();
   const card = (title: string) =>
     within(screen.getByText(title).parentElement!);
   await screen.findByText("CA encaissé en octobre 2026");
   expect(
     card("CA encaissé en octobre 2026").getByText("+100 % vs 2025"),
   ).toBeInTheDocument();
+  expect(card("Séances ce mois").getByText("2")).toBeInTheDocument();
   expect(
-    card("CA encaissé depuis le 1er janvier").getByText(/^1.800,00 €$/),
+    card("Séances ce mois").getByText("Panier moyen 60,00 €"),
   ).toBeInTheDocument();
-  expect(
-    card("Résultat estimé depuis le 1er janvier").getByText(/^1.740,00 €$/),
-  ).toBeInTheDocument();
+  expect(card("Résultat estimé").getByText(/^1.740,00 €$/)).toBeInTheDocument();
   expect(
     card("Provisions impôt + URSSAF").getByText("55,60 €"),
   ).toBeInTheDocument();
 
   expect(
-    screen.getByRole("button", { name: "✓ Toutes les factures sont envoyées" }),
-  ).toBeDisabled();
+    screen.getByText("Toutes les factures sont envoyées"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /^Envoyer/ }),
+  ).not.toBeInTheDocument();
   await user.click(
-    screen.getByRole("button", { name: "Impayés : 2 factures, 100,00 €" }),
+    screen.getByRole("button", { name: "Relancer : 2 factures impayées" }),
   );
   await user.click(
     screen.getByRole("button", {
@@ -123,13 +129,18 @@ test("accueil vide", async () => {
   expect(
     await screen.findByText("Aucune séance pour l'instant."),
   ).toBeInTheDocument();
-  for (const name of [
-    "✓ Toutes les séances sont facturées",
-    "✓ Toutes les factures sont envoyées",
-    "✓ Aucun impayé",
-    "✓ Aucun chèque à remettre",
+  for (const text of [
+    "Toutes les séances sont facturées",
+    "Toutes les factures sont envoyées",
+    "Aucun impayé",
+    "Aucun chèque à remettre",
   ])
-    expect(screen.getByRole("button", { name })).toBeDisabled();
+    expect(screen.getByText(text)).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", {
+      name: /^(Facturer|Envoyer|Remettre|Relancer) :/,
+    }),
+  ).not.toBeInTheDocument();
   expect(screen.queryByText(/vs 2025/)).not.toBeInTheDocument();
 });
 
@@ -180,7 +191,7 @@ async function withDrafts() {
   render(<App />);
   await user.click(
     await screen.findByRole("button", {
-      name: "Séances non facturées : 2 séances, 120,00 €",
+      name: "Facturer : 2 séances à facturer",
     }),
   );
   return { user, state };
@@ -205,7 +216,7 @@ test("les séances non facturées se déplient et se valident sur place", async 
   expect(state.sessions[0].validated_at).not.toBeNull();
   expect(
     screen.getByRole("button", {
-      name: "Séances non facturées : 1 séance, 60,00 €",
+      name: "Facturer : 1 séance à facturer",
     }),
   ).toBeInTheDocument();
 });

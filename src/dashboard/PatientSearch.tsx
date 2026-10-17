@@ -1,4 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
+import { Icon } from "../icons";
 import { formatDate, type PatientSummary } from "../patients/api";
 import { searchApi } from "../search/api";
 
@@ -51,15 +52,18 @@ export function PatientSearch({
 
   return (
     <div className="patient-search">
-      <input
-        type="search"
-        autoFocus
-        aria-label="Rechercher un patient"
-        placeholder="Patient : nom, date de naissance ou téléphone"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={onKeyDown}
-      />
+      <div className="search-field">
+        <Icon name="search" />
+        <input
+          type="search"
+          autoFocus
+          aria-label="Rechercher un patient"
+          placeholder="Patient : nom, date de naissance ou téléphone"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onKeyDown}
+        />
+      </div>
       {name && (
         <ul aria-label="Patients trouvés">
           {patients.map((p, index) => (

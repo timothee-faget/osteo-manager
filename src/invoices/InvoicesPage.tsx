@@ -92,12 +92,22 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
                 <td>{i.patient_name}</td>
                 <td>{formatEuros(i.amount_cents)}</td>
                 <td>
-                  {i.credit_note ? "—" : PAYMENT_STATUSES[i.payment_status]}
+                  {i.credit_note ? (
+                    "—"
+                  ) : (
+                    <span className={`status status-${i.payment_status}`}>
+                      {PAYMENT_STATUSES[i.payment_status]}
+                    </span>
+                  )}
                 </td>
                 <td>
-                  {i.sent_at
-                    ? `Envoyée le ${formatDate(i.sent_at.slice(0, 10))}`
-                    : "Non envoyée"}
+                  {i.sent_at ? (
+                    <span className="status status-sent">
+                      Envoyée le {formatDate(i.sent_at.slice(0, 10))}
+                    </span>
+                  ) : (
+                    <span className="status status-unsent">Non envoyée</span>
+                  )}
                 </td>
               </tr>
             ))}
