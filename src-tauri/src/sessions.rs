@@ -24,14 +24,8 @@ pub struct SessionInput {
     pub starts_at: String,
     /// Motif
     pub reason: String,
-    /// Contexte / anamnèse
-    pub anamnesis: String,
-    /// Examen / constatations
-    pub examination: String,
-    /// Traitement effectué
-    pub treatment: String,
-    /// Conseils donnés
-    pub advice: String,
+    /// Free-text clinical notes.
+    pub notes: String,
     pub fee_cents: i64,
 }
 
@@ -53,8 +47,8 @@ fn now() -> String {
     Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
-const COLUMNS: &str = "s.id, s.patient_id, s.location_id, s.starts_at, s.reason, s.anamnesis,
-    s.examination, s.treatment, s.advice, s.fee_cents, s.validated_at, i.id, i.number,
+const COLUMNS: &str = "s.id, s.patient_id, s.location_id, s.starts_at, s.reason, s.notes,
+    s.fee_cents, s.validated_at, i.id, i.number,
     s.created_at, s.updated_at, i.amount_cents,
     (SELECT COALESCE(SUM(p.amount_cents), 0) FROM payment p WHERE p.invoice_id = i.id)";
 /// Joins the session's current (non-cancelled) invoice, if any.
@@ -69,20 +63,17 @@ fn from_row(r: &Row) -> rusqlite::Result<Session> {
             location_id: r.get(2)?,
             starts_at: r.get(3)?,
             reason: r.get(4)?,
-            anamnesis: r.get(5)?,
-            examination: r.get(6)?,
-            treatment: r.get(7)?,
-            advice: r.get(8)?,
-            fee_cents: r.get(9)?,
+            notes: r.get(5)?,
+            fee_cents: r.get(6)?,
         },
-        validated_at: r.get(10)?,
-        invoice_id: r.get(11)?,
-        invoice_number: r.get(12)?,
-        created_at: r.get(13)?,
-        updated_at: r.get(14)?,
+        validated_at: r.get(7)?,
+        invoice_id: r.get(8)?,
+        invoice_number: r.get(9)?,
+        created_at: r.get(10)?,
+        updated_at: r.get(11)?,
         payment_status: r
-            .get::<_, Option<i64>>(15)?
-            .map(|amount| r.get(16).map(|paid| PaymentStatus::of(amount, paid)))
+            .get::<_, Option<i64>>(12)?
+            .map(|amount| r.get(13).map(|paid| PaymentStatus::of(amount, paid)))
             .transpose()?,
     })
 }
@@ -183,7 +174,7 @@ pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
     ))?;
     let rows = stmt.query_map([limit], |r| {
         let session = from_row(r)?;
-        let sent: bool = r.get(18)?;
+        let sent: bool = r.get(15)?;
         let status = match session.payment_status {
             None => SessionStatus::Unbilled,
             Some(PaymentStatus::Paid) => SessionStatus::Paid,
@@ -194,7 +185,7 @@ pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
         Ok(RecentSession {
             session_id: session.id,
             patient_id: session.data.patient_id,
-            patient_name: r.get(17)?,
+            patient_name: r.get(14)?,
             starts_at: session.data.starts_at,
             reason: session.data.reason,
             fee_cents: session.data.fee_cents,
@@ -220,14 +211,7 @@ fn check(
     current: Option<&Session>,
 ) -> Result<SessionInput> {
     let mut s = input.clone();
-    for t in [
-        &mut s.starts_at,
-        &mut s.reason,
-        &mut s.anamnesis,
-        &mut s.examination,
-        &mut s.treatment,
-        &mut s.advice,
-    ] {
+    for t in [&mut s.starts_at, &mut s.reason, &mut s.notes] {
         *t = t.trim().to_string();
     }
     if NaiveDateTime::parse_from_str(&s.starts_at, DATETIME_FORMAT).is_err() {
@@ -275,18 +259,15 @@ pub fn create(conn: &Connection, input: &SessionInput) -> Result<Session> {
     let s = check(conn, input, None)?;
     let ts = now();
     conn.execute(
-        "INSERT INTO session (patient_id, location_id, starts_at, reason, anamnesis, examination,
-            treatment, advice, fee_cents, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
+        "INSERT INTO session (patient_id, location_id, starts_at, reason, notes, fee_cents,
+            created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
         params![
             s.patient_id,
             s.location_id,
             s.starts_at,
             s.reason,
-            s.anamnesis,
-            s.examination,
-            s.treatment,
-            s.advice,
+            s.notes,
             s.fee_cents,
             ts
         ],
@@ -299,18 +280,14 @@ pub fn update(conn: &Connection, id: i64, input: &SessionInput) -> Result<Sessio
     let s = check(conn, input, Some(&current))?;
     conn.execute(
         "UPDATE session SET patient_id = ?1, location_id = ?2, starts_at = ?3, reason = ?4,
-            anamnesis = ?5, examination = ?6, treatment = ?7, advice = ?8, fee_cents = ?9,
-            updated_at = ?10
-         WHERE id = ?11",
+            notes = ?5, fee_cents = ?6, updated_at = ?7
+         WHERE id = ?8",
         params![
             s.patient_id,
             s.location_id,
             s.starts_at,
             s.reason,
-            s.anamnesis,
-            s.examination,
-            s.treatment,
-            s.advice,
+            s.notes,
             s.fee_cents,
             now(),
             id
@@ -420,10 +397,10 @@ mod tests {
 
         let mut i = a.data.clone();
         i.fee_cents = 4500;
-        i.advice = " Marche quotidienne ".into();
+        i.notes = " Marche quotidienne ".into();
         let edited = update(&f.conn, a.id, &i).unwrap();
         assert_eq!(
-            (edited.data.fee_cents, edited.data.advice.as_str()),
+            (edited.data.fee_cents, edited.data.notes.as_str()),
             (4500, "Marche quotidienne")
         );
 
@@ -617,9 +594,9 @@ mod tests {
         let (s, _) = f.validate(s.id, "2026-10-16").unwrap();
 
         let mut notes = s.data.clone();
-        notes.examination = "Restriction L5".into();
+        notes.notes = "Restriction L5".into();
         assert_eq!(
-            update(&f.conn, s.id, &notes).unwrap().data.examination,
+            update(&f.conn, s.id, &notes).unwrap().data.notes,
             "Restriction L5"
         );
 

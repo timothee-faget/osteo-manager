@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import { useSave } from "../settings/useSave";
 import {
   CIVILITIES,
@@ -41,15 +41,6 @@ const SYSTEMS: Field[] = [
   { key: "lifestyle", label: "Hygiène de vie", multiline: true },
 ];
 
-const TABS = {
-  identification: "Identification",
-  history: "Antécédents",
-  systems: "Revue des systèmes",
-  attachments: "Pièces jointes",
-};
-
-type Tab = keyof typeof TABS;
-
 const EMPTY_GUARDIAN: Guardian = {
   name: "",
   relationship: "",
@@ -57,32 +48,31 @@ const EMPTY_GUARDIAN: Guardian = {
   email: "",
 };
 
-/** The record in tabs; `attachments` adds their tab (saved records only). */
-export function PatientForm({
-  initial,
-  isMinor,
-  submitLabel,
-  onSubmit,
-  attachments,
-}: {
-  initial: PatientInput;
-  /** From the saved record; the section also opens when guardians exist. */
-  isMinor: boolean;
-  submitLabel: string;
-  onSubmit: (input: PatientInput) => Promise<Patient>;
-  attachments?: ReactNode;
-}) {
-  const [form, setForm] = useState(initial);
-  const [tab, setTab] = useState<Tab>("identification");
-  const { busy, save, feedback } = useSave();
+const IDENTITY_KEYS: (keyof PatientInput)[] = [
+  "civility",
+  "birth_date",
+  ...IDENTIFICATION.map((f) => f.key),
+  "guardians",
+  "guardian_consent_date",
+];
 
+const CLINICAL_KEYS = [...HISTORY, ...SYSTEMS].map((f) => f.key);
+
+type Submit = (patch: Partial<PatientInput>) => Promise<Patient>;
+
+/**
+ * State of a form editing only `keys` of the record: it submits just those, so that
+ * two forms on the same record never overwrite each other's fields.
+ */
+function usePatientForm(
+  initial: PatientInput,
+  keys: (keyof PatientInput)[],
+  onSubmit: Submit,
+  success: string,
+) {
+  const [form, setForm] = useState(initial);
+  const { busy, save, feedback } = useSave();
   const set = (patch: Partial<PatientInput>) => setForm({ ...form, ...patch });
-  const setGuardian = (i: number, patch: Partial<Guardian>) =>
-    set({
-      guardians: form.guardians.map((g, j) =>
-        i === j ? { ...g, ...patch } : g,
-      ),
-    });
 
   function fields(list: Field[]) {
     return list.map(({ key, label, multiline }) => (
@@ -106,15 +96,46 @@ export function PatientForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    const patch = Object.fromEntries(keys.map((k) => [k, form[k]]));
     // The backend returns the normalized record (trimmed fields).
-    await save(async () => {
-      const saved = await onSubmit(form);
-      setForm(saved);
-    }, "Fiche enregistrée.");
+    await save(async () => setForm(await onSubmit(patch)), success);
   }
 
-  const identification = (
-    <>
+  return { form, set, fields, submit, busy, feedback };
+}
+
+/** Civil details and legal guardians. */
+export function IdentityForm({
+  initial,
+  isMinor,
+  submitLabel,
+  onSubmit,
+}: {
+  initial: PatientInput;
+  /** From the saved record; the section also opens when guardians exist. */
+  isMinor: boolean;
+  submitLabel: string;
+  onSubmit: Submit;
+}) {
+  const { form, set, fields, submit, busy, feedback } = usePatientForm(
+    initial,
+    IDENTITY_KEYS,
+    onSubmit,
+    "Fiche enregistrée.",
+  );
+  const setGuardian = (i: number, patch: Partial<Guardian>) =>
+    set({
+      guardians: form.guardians.map((g, j) =>
+        i === j ? { ...g, ...patch } : g,
+      ),
+    });
+
+  return (
+    <form
+      className="patient-form"
+      aria-label="Identification"
+      onSubmit={(e) => void submit(e)}
+    >
       <div className="fields">
         <label>
           Civilité
@@ -207,46 +228,47 @@ export function PatientForm({
           />
         </label>
       </details>
-    </>
+      {feedback}
+      <button type="submit" disabled={busy}>
+        {submitLabel}
+      </button>
+    </form>
   );
+}
 
-  const tabs = (Object.keys(TABS) as Tab[]).filter(
-    (t) => t !== "attachments" || attachments,
+/** Medical history and review of systems, always editable during a consultation. */
+export function ClinicalNotesForm({
+  initial,
+  onSubmit,
+}: {
+  initial: PatientInput;
+  onSubmit: Submit;
+}) {
+  const { fields, submit, busy, feedback } = usePatientForm(
+    initial,
+    CLINICAL_KEYS,
+    onSubmit,
+    "Notes enregistrées.",
   );
-
   return (
-    <div className="card">
-      <div className="tabs" role="tablist" aria-label="Fiche patient">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-          >
-            {TABS[t]}
-          </button>
-        ))}
+    <form
+      className="patient-form"
+      aria-label="Notes patient"
+      onSubmit={(e) => void submit(e)}
+    >
+      <h3>Notes patient</h3>
+      <div className="note-group">
+        <h4>Antécédents</h4>
+        {fields(HISTORY)}
       </div>
-      {tab === "attachments" ? (
-        attachments
-      ) : (
-        <form
-          className="patient-form"
-          role="tabpanel"
-          aria-label={TABS[tab]}
-          onSubmit={(e) => void submit(e)}
-        >
-          {tab === "identification" && identification}
-          {tab === "history" && <div className="fields">{fields(HISTORY)}</div>}
-          {tab === "systems" && <div className="fields">{fields(SYSTEMS)}</div>}
-          {feedback}
-          <button type="submit" disabled={busy}>
-            {submitLabel}
-          </button>
-        </form>
-      )}
-    </div>
+      <div className="note-group">
+        <h4>Revue des systèmes</h4>
+        {fields(SYSTEMS)}
+      </div>
+      {feedback}
+      <button type="submit" disabled={busy}>
+        Enregistrer les notes
+      </button>
+    </form>
   );
 }

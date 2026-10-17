@@ -19,10 +19,7 @@ export type SessionInput = {
   /** `YYYY-MM-DDTHH:MM`, local time. */
   starts_at: string;
   reason: string;
-  anamnesis: string;
-  examination: string;
-  treatment: string;
-  advice: string;
+  notes: string;
   fee_cents: number;
 };
 

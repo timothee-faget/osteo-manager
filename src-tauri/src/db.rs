@@ -357,6 +357,19 @@ Si vous avez déjà effectué le règlement, merci de ne pas tenir compte de ce 
 
 Bien cordialement,
 {praticienne}');",
+    // v14: a session has a single free-text note besides its reason. The former
+    // clinical fields are merged into it, each under its heading.
+    "ALTER TABLE session ADD COLUMN notes TEXT NOT NULL DEFAULT '';
+    UPDATE session SET notes = rtrim(
+        CASE WHEN anamnesis <> '' THEN 'Anamnèse : ' || anamnesis || char(10, 10) ELSE '' END
+        || CASE WHEN examination <> '' THEN 'Examen : ' || examination || char(10, 10) ELSE '' END
+        || CASE WHEN treatment <> '' THEN 'Traitement : ' || treatment || char(10, 10) ELSE '' END
+        || CASE WHEN advice <> '' THEN 'Conseils : ' || advice ELSE '' END,
+        char(10));
+    ALTER TABLE session DROP COLUMN anamnesis;
+    ALTER TABLE session DROP COLUMN examination;
+    ALTER TABLE session DROP COLUMN treatment;
+    ALTER TABLE session DROP COLUMN advice;",
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -562,6 +575,47 @@ mod tests {
         assert!(
             conn.execute("UPDATE session SET fee_cents = 1", [])
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn v14_merges_clinical_fields_into_notes() {
+        let (_dir, path) = db_path();
+        let conn = open_with(&path, &KEY, &MIGRATIONS[..13]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO patient (id, last_name, first_name, created_at, updated_at)
+                VALUES (1, 'Dupont', 'Anne', 't', 't');
+             INSERT INTO practice_location (id, name, kind) VALUES (1, 'Cabinet', 'practice');
+             INSERT INTO session (id, patient_id, location_id, starts_at, reason, anamnesis,
+                examination, treatment, advice, fee_cents, validated_at, created_at, updated_at)
+                VALUES (1, 1, 1, '2026-10-16T09:00', 'Lombalgie', 'Chute', '', 'Ttt L5',
+                    'Marcher', 6000, 't', 't', 't'),
+                (2, 1, 1, '2026-10-17T09:00', 'Suivi', '', '', '', '', 6000, NULL, 't', 't');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let conn = open_with(&path, &KEY, MIGRATIONS).unwrap();
+        let notes: Vec<(String, String)> = conn
+            .prepare("SELECT reason, notes FROM session ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            notes,
+            [
+                (
+                    "Lombalgie".into(),
+                    "Anamnèse : Chute\n\nTraitement : Ttt L5\n\nConseils : Marcher".into()
+                ),
+                ("Suivi".into(), String::new()),
+            ]
+        );
+        assert!(
+            conn.prepare("SELECT anamnesis FROM session").is_err(),
+            "old columns are dropped"
         );
     }
 }

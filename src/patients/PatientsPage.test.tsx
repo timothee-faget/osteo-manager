@@ -49,23 +49,18 @@ test("création d'une fiche puis retour à la liste", async () => {
   await user.type(screen.getByLabelText("Nom"), "Dupont");
   await user.type(screen.getByLabelText("Prénom"), "Anne");
   await user.type(screen.getByLabelText("Date de naissance"), "1980-05-12");
-  await user.click(screen.getByRole("tab", { name: "Antécédents" }));
-  await user.type(
-    screen.getByLabelText("Chirurgicaux"),
-    "Appendicectomie 1995",
-  );
-  await user.click(screen.getByRole("tab", { name: "Revue des systèmes" }));
-  await user.type(screen.getByLabelText("Hygiène de vie"), "Sommeil correct");
+  await user.type(screen.getByLabelText("Profession"), "Infirmière");
   await user.click(screen.getByRole("button", { name: "Créer la fiche" }));
 
   expect(
-    await screen.findByRole("heading", { name: "DUPONT Anne" }),
+    await screen.findByRole("heading", { name: "Mme DUPONT Anne" }),
   ).toBeInTheDocument();
+  expect(screen.getByText(/ans \(12\/05\/1980\)$/)).toBeInTheDocument();
+  expect(screen.getByText("Infirmière")).toBeInTheDocument();
   expect(state.patients[0]).toMatchObject({
     civility: "mme",
     birth_date: "1980-05-12",
-    surgical_history: "Appendicectomie 1995",
-    lifestyle: "Sommeil correct",
+    profession: "Infirmière",
   });
 
   await user.click(screen.getByRole("button", { name: "← Patients" }));
@@ -88,16 +83,53 @@ test("le nom est obligatoire", async () => {
   expect(state.patients).toHaveLength(0);
 });
 
-test("modification d'une fiche existante", async () => {
+test("notes patient éditables en consultation", async () => {
   const { user, state } = await setup();
   await createPatient(user, "Dupont", "Anne");
-  await user.click(screen.getByRole("tab", { name: "Revue des systèmes" }));
-  await user.type(screen.getByLabelText("Digestif"), "Reflux");
-  await user.click(screen.getByRole("button", { name: "Enregistrer" }));
-  expect(await screen.findByRole("status")).toHaveTextContent(
+  const notes = within(screen.getByRole("form", { name: "Notes patient" }));
+  await user.type(notes.getByLabelText("Chirurgicaux"), "Appendicectomie 1995");
+  await user.type(notes.getByLabelText("Digestif"), "Reflux");
+  await user.click(
+    notes.getByRole("button", { name: "Enregistrer les notes" }),
+  );
+  expect(await notes.findByRole("status")).toHaveTextContent(
+    "Notes enregistrées.",
+  );
+  expect(state.patients[0]).toMatchObject({
+    surgical_history: "Appendicectomie 1995",
+    digestive: "Reflux",
+  });
+});
+
+test("modifier la fiche met à jour le bandeau sans toucher aux notes", async () => {
+  const { user, state } = await setup();
+  await createPatient(user, "Dupont", "Anne");
+  expect(
+    screen.queryByRole("form", { name: "Identification" }),
+  ).not.toBeInTheDocument();
+
+  // Notes typed but not saved yet must survive an identity save, and vice versa.
+  const notes = within(screen.getByRole("form", { name: "Notes patient" }));
+  await user.type(notes.getByLabelText("Médicaux"), "Asthme");
+  await user.click(
+    notes.getByRole("button", { name: "Enregistrer les notes" }),
+  );
+  await notes.findByRole("status");
+
+  await user.click(screen.getByRole("button", { name: "Modifier la fiche" }));
+  const identity = within(screen.getByRole("form", { name: "Identification" }));
+  await user.type(identity.getByLabelText("Téléphone"), "06 00 00 00 00");
+  await user.click(
+    identity.getByRole("button", { name: "Enregistrer la fiche" }),
+  );
+  expect(await identity.findByRole("status")).toHaveTextContent(
     "Fiche enregistrée.",
   );
-  expect(state.patients[0].digestive).toBe("Reflux");
+  expect(screen.getByText("06 00 00 00 00")).toBeInTheDocument();
+  expect(state.patients[0]).toMatchObject({
+    phone: "06 00 00 00 00",
+    medical_history: "Asthme",
+  });
 });
 
 test("recherche insensible aux accents", async () => {
@@ -126,6 +158,7 @@ test("patient mineur : badge et représentants légaux", async () => {
   await createPatient(user, "Petit", "Léo", "2018-03-01");
   expect(screen.getByText("Mineur")).toBeInTheDocument();
 
+  await user.click(screen.getByRole("button", { name: "Modifier la fiche" }));
   await user.click(
     screen.getByRole("button", { name: "Ajouter un représentant légal" }),
   );
@@ -136,12 +169,17 @@ test("patient mineur : badge et représentants légaux", async () => {
     screen.getByLabelText("Autorisation des représentants obtenue le"),
     "2026-10-01",
   );
-  await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enregistrer la fiche" }),
+  );
   await screen.findByRole("status");
   expect(state.patients[0].guardians).toEqual([
     { name: "Julie Petit", relationship: "mère", phone: "", email: "" },
   ]);
   expect(state.patients[0].guardian_consent_date).toBe("2026-10-01");
+  expect(
+    screen.getByText("Représentant : Julie Petit (mère)"),
+  ).toBeInTheDocument();
 });
 
 test("export RGPD dans le dossier choisi", async () => {
