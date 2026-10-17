@@ -7,6 +7,7 @@ pub mod db;
 pub mod expenses;
 pub mod fixed_assets;
 pub mod invoices;
+pub mod mail;
 pub mod patients;
 pub mod payments;
 pub mod pdf;
@@ -104,6 +105,13 @@ pub fn run() {
             invoices::save_credit_note_pdf,
             invoices::cancel_invoice,
             invoices::set_invoice_sent,
+            mail::get_mail_settings,
+            mail::update_mail_settings,
+            mail::test_mail_settings,
+            mail::get_mail_template,
+            mail::update_mail_template,
+            mail::get_invoice_email,
+            mail::send_invoice_email,
             payments::list_payments,
             payments::add_payment,
             payments::delete_payment,
