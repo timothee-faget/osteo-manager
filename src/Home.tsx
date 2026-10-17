@@ -32,6 +32,18 @@ const PAGES: Record<Page, string> = {
   settings: "Paramètres",
 };
 
+/** Where to land on arrival; `seq` remounts the page even for the same page. */
+type Target = {
+  seq: number;
+  /** Record to open. */
+  id?: number;
+  /** Patients: open the form of a new session, or of `sessionId`. */
+  newSession?: boolean;
+  sessionId?: number;
+  /** Patients: a new record pre-filled with this name. */
+  newPatientName?: string;
+};
+
 function Home({
   onLock,
   onRestored,
@@ -40,10 +52,7 @@ function Home({
   onRestored: () => void;
 }) {
   const [page, setPage] = useState<Page>("home");
-  // Record to open on arrival; `seq` remounts the page even for the same page.
-  const [target, setTarget] = useState<{ id: number; seq: number } | null>(
-    null,
-  );
+  const [target, setTarget] = useState<Target | null>(null);
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
@@ -57,9 +66,9 @@ function Home({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  function go(p: Page, id?: number) {
+  function go(p: Page, intent?: Omit<Target, "seq">) {
     setPage(p);
-    setTarget(id === undefined ? null : { id, seq: (target?.seq ?? 0) + 1 });
+    setTarget(intent ? { ...intent, seq: (target?.seq ?? 0) + 1 } : null);
     setSearching(false);
   }
   const [autoLock, setAutoLock] = useState<number | null>(null);
@@ -99,17 +108,25 @@ function Home({
         {page === "home" && (
           <DashboardPage
             onOpenCollections={() => go("collections")}
-            onOpenPatient={(id) => go("patients", id)}
+            onOpenAccounting={() => go("accounting")}
+            onOpenPatient={(id, opts) => go("patients", { id, ...opts })}
+            onNewPatient={(name) => go("patients", { newPatientName: name })}
           />
         )}
         {page === "patients" && (
-          <PatientsPage key={target?.seq} openPatientId={target?.id} />
+          <PatientsPage
+            key={target?.seq}
+            openPatientId={target?.id}
+            newSession={target?.newSession}
+            openSessionId={target?.sessionId}
+            newPatientName={target?.newPatientName}
+          />
         )}
         {page === "invoices" && (
           <InvoicesPage key={target?.seq} openInvoiceId={target?.id} />
         )}
         {page === "collections" && (
-          <CollectionsPage onOpenInvoice={(id) => go("invoices", id)} />
+          <CollectionsPage onOpenInvoice={(id) => go("invoices", { id })} />
         )}
         {page === "expenses" && <ExpensesPage />}
         {page === "assets" && <FixedAssetsPage />}
@@ -125,8 +142,8 @@ function Home({
       {searching && (
         <QuickSearch
           onClose={() => setSearching(false)}
-          onOpenPatient={(id) => go("patients", id)}
-          onOpenInvoice={(id) => go("invoices", id)}
+          onOpenPatient={(id) => go("patients", { id })}
+          onOpenInvoice={(id) => go("invoices", { id })}
         />
       )}
     </div>

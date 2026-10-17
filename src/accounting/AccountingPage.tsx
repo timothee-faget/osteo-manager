@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { KeyFigures } from "../dashboard/KeyFigures";
 import { formatEuros } from "../money";
 import { formatDate } from "../patients/api";
 import { useSave } from "../settings/useSave";
@@ -45,6 +46,7 @@ export function AccountingPage() {
   return (
     <section>
       <h2>Comptabilité</h2>
+      <KeyFigures />
       <header className="year">
         <button
           type="button"
