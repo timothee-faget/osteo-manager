@@ -26,7 +26,9 @@ export function formatFixed(
 
 export const parseEuros = (input: string) => parseFixed(input, 2);
 export const centsToInput = (cents: number) => formatFixed(cents, 2);
-export const formatEuros = (cents: number) => `${formatFixed(cents, 2)} €`;
+/** For display: thousands grouped with a narrow no-break space ("39 120,00 €"). */
+export const formatEuros = (cents: number) =>
+  `${formatFixed(cents, 2).replace(/\B(?=(\d{3})+,)/g, "\u202f")} €`;
 
 export const parsePercent = (input: string) => parseFixed(input, 2);
 export const bpToInput = (bp: number) => formatFixed(bp, 2, true);

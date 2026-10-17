@@ -148,7 +148,11 @@ export function ExpensesPage() {
           onCancel={() => setEditing(null)}
         />
       ) : (
-        <button type="button" onClick={() => setEditing({ kind: "new" })}>
+        <button
+          className="primary"
+          type="button"
+          onClick={() => setEditing({ kind: "new" })}
+        >
           Nouvelle dépense
         </button>
       )}

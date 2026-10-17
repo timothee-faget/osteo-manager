@@ -84,7 +84,7 @@ test("synthèse 2035 et livre-journal de l'année", async () => {
   );
   const rent = expenses.getByText("Loyers et charges locatives").closest("tr")!;
   expect(within(rent).getByText("15")).toBeInTheDocument();
-  expect(within(rent).getByText("1000,00 €")).toBeInTheDocument();
+  expect(within(rent).getByText("1 000,00 €")).toBeInTheDocument();
   expect(
     expenses.getByText("Total des dépenses (lignes 8 à 32)").closest("tr"),
   ).toHaveClass("total");

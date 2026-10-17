@@ -16,6 +16,7 @@ export function SettingsPage({
 }) {
   return (
     <div className="settings">
+      <h2>Paramètres</h2>
       <PractitionerSettings />
       <LocationSettings />
       <BillingSettings />

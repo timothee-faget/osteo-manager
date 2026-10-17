@@ -140,6 +140,7 @@ export function ChequeDeposits() {
               />
             </label>
             <button
+              className="primary"
               type="button"
               disabled={busy || selected.length === 0}
               onClick={() =>

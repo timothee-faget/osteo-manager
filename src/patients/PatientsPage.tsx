@@ -77,7 +77,7 @@ function PatientList({
     <section>
       <header>
         <h2>Patients</h2>
-        <button type="button" onClick={onNew}>
+        <button className="primary" type="button" onClick={onNew}>
           Nouveau patient
         </button>
       </header>
