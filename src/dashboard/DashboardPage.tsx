@@ -42,7 +42,7 @@ export function DashboardPage({
   return (
     <section>
       <h2>Tableau de bord</h2>
-      <table aria-label="Chiffres clés">
+      <table className="figures" aria-label="Chiffres clés">
         <thead>
           <tr>
             <th />
@@ -68,26 +68,22 @@ export function DashboardPage({
       </p>
 
       <h3>À traiter</h3>
-      <ul>
-        <li>
-          <button type="button" className="link" onClick={onOpenCollections}>
-            Impayés : {plural(d.unpaid_count, "facture")},{" "}
-            {formatEuros(d.unpaid_cents)}
-          </button>
-        </li>
-        <li>
-          <button type="button" className="link" onClick={onOpenCollections}>
-            Chèques à remettre : {plural(d.cheques_to_deposit, "chèque")},{" "}
-            {formatEuros(d.cheques_to_deposit_cents)}
-          </button>
-        </li>
-      </ul>
+      <div className="todo">
+        <button type="button" onClick={onOpenCollections}>
+          Impayés : {plural(d.unpaid_count, "facture")},{" "}
+          {formatEuros(d.unpaid_cents)}
+        </button>
+        <button type="button" onClick={onOpenCollections}>
+          Chèques à remettre : {plural(d.cheques_to_deposit, "chèque")},{" "}
+          {formatEuros(d.cheques_to_deposit_cents)}
+        </button>
+      </div>
 
       <h3>CA encaissé par lieu depuis le 1er janvier</h3>
       {d.by_location.length === 0 ? (
         <p>Aucun encaissement cette année.</p>
       ) : (
-        <table aria-label="CA par lieu">
+        <table className="figures" aria-label="CA par lieu">
           <tbody>
             {d.by_location.map((l) => (
               <tr key={l.location_name}>

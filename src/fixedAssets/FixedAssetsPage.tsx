@@ -80,7 +80,11 @@ export function FixedAssetsPage() {
           onCancel={() => setEditing(null)}
         />
       ) : (
-        <button type="button" onClick={() => setEditing({ asset: null })}>
+        <button
+          className="primary"
+          type="button"
+          onClick={() => setEditing({ asset: null })}
+        >
           Ajouter une immobilisation
         </button>
       )}

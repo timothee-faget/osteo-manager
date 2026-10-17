@@ -71,10 +71,10 @@ function Home({
   useIdle(autoLock, onLock);
 
   return (
-    <>
-      <header className="topbar">
-        <h1>Osteo Manager</h1>
-        <nav>
+    <div className="app">
+      <aside className="sidebar">
+        <h1 className="brand">Osteo Manager</h1>
+        <nav aria-label="Navigation">
           {(Object.keys(PAGES) as Page[]).map((p) => (
             <button
               key={p}
@@ -86,13 +86,15 @@ function Home({
             </button>
           ))}
         </nav>
-        <button type="button" onClick={() => setSearching(true)}>
-          Rechercher <kbd>⌘K</kbd>
-        </button>
-        <button type="button" onClick={onLock}>
-          Verrouiller
-        </button>
-      </header>
+        <div className="sidebar-actions">
+          <button type="button" onClick={() => setSearching(true)}>
+            Rechercher <kbd>⌘K</kbd>
+          </button>
+          <button type="button" onClick={onLock}>
+            Verrouiller
+          </button>
+        </div>
+      </aside>
       <main className="container">
         {page === "home" && (
           <DashboardPage onOpenCollections={() => go("collections")} />
@@ -124,7 +126,7 @@ function Home({
           onOpenInvoice={(id) => go("invoices", id)}
         />
       )}
-    </>
+    </div>
   );
 }
 

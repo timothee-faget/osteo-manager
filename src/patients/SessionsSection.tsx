@@ -39,6 +39,7 @@ export function SessionsSection({ patientId }: { patientId: number }) {
         <h3>Séances</h3>
         {editing === null && (
           <button
+            className="primary"
             type="button"
             onClick={() => {
               setMessage(null);

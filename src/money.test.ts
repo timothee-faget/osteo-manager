@@ -23,6 +23,9 @@ test("formate les centimes", () => {
   expect(formatEuros(6000)).toBe("60,00 €");
   expect(formatEuros(7)).toBe("0,07 €");
   expect(formatEuros(-1250)).toBe("-12,50 €");
+  // Thousands grouped with a narrow no-break space, as in French typography.
+  expect(formatEuros(3912000)).toBe("39\u202f120,00 €");
+  expect(formatEuros(-123456789)).toBe("-1\u202f234\u202f567,89 €");
 });
 
 test("taux en points de base", () => {

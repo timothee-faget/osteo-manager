@@ -79,7 +79,8 @@ test("ajout d'une immobilisation au registre", async () => {
   const row = (
     await screen.findByRole("button", { name: "Table de traitement" })
   ).closest("tr")!;
-  expect(within(row).getByText("3000,00 €")).toBeInTheDocument();
+  // Testing Library collapses the narrow no-break space into a plain space.
+  expect(within(row).getByText("3 000,00 €")).toBeInTheDocument();
   expect(within(row).getByText("5 ans")).toBeInTheDocument();
   expect(within(row).getByText("600,00 €")).toBeInTheDocument();
   expect(
@@ -120,7 +121,7 @@ test("plan d'amortissement et cession", async () => {
   const plan = within(
     await screen.findByRole("table", { name: "Plan d'amortissement" }),
   );
-  expect(plan.getByText("1200,00 €")).toBeInTheDocument();
+  expect(plan.getByText("1 200,00 €")).toBeInTheDocument();
 
   const f = form();
   expect(f.queryByLabelText("Prix de cession (€)")).not.toBeInTheDocument();

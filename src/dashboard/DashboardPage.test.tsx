@@ -67,7 +67,7 @@ test("chiffres clés, comparaison N-1, à traiter et répartition par lieu", asy
     within(receipts)
       .getAllByRole("cell")
       .map((c) => c.textContent),
-  ).toEqual(["120,00 €", "60,00 €", "1800,00 €", "1200,00 €"]);
+  ).toEqual(["120,00 €", "60,00 €", "1\u202f800,00 €", "1\u202f200,00 €"]);
   expect(
     within(
       figures.getByRole("rowheader", { name: "Provision URSSAF" })
