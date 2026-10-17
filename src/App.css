@@ -1173,7 +1173,7 @@ td > button + button {
 
 .record-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
   gap: var(--space-3);
   align-items: start;
   margin-top: var(--space-5);
