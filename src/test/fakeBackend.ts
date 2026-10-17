@@ -481,6 +481,46 @@ export function fakeBackend(initial: LockStatus) {
           body: fill(state.invoiceTemplate.body),
         };
       }
+      case "list_unsent_invoice_emails":
+        return [...state.invoices]
+          .filter((i) => !i.sent_at && !i.credit_note)
+          .reverse()
+          .map((i) => ({
+            invoice: i,
+            draft: {
+              to:
+                state.patients.find((p) => p.id === i.patient_id)?.email ?? "",
+              subject: `Facture ${i.number}`,
+              body: "Bonjour",
+            },
+          }));
+      case "send_invoice_emails": {
+        // Like the backend, failures are reported per invoice, never thrown.
+        let stop: { code: string } | null = null;
+        try {
+          mailReady();
+        } catch (e) {
+          stop = e as { code: string };
+        }
+        // Fake rule: addresses at "refuse.example" are rejected.
+        return a.items.map((item: { invoice_id: number; draft: Draft }) => {
+          const i = state.invoices.find((x) => x.id === item.invoice_id)!;
+          const code = stop
+            ? stop.code
+            : item.draft.to.endsWith("@refuse.example")
+              ? "mail_rejected"
+              : null;
+          if (code)
+            return {
+              invoice_id: i.id,
+              number: i.number,
+              error: { code, message: "" },
+            };
+          state.sentMails.push({ ...item.draft, invoiceId: i.id });
+          i.sent_at = "2026-10-16T18:00:00";
+          return { invoice_id: i.id, number: i.number, error: null };
+        });
+      }
       case "send_invoice_email": {
         mailReady();
         const i = state.invoices.find((x) => x.id === a.id)!;

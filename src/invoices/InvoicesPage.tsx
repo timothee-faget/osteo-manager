@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "../lock/api";
 import { formatEuros } from "../money";
+import { BatchSend } from "../mail/BatchSend";
 import { InvoiceEmail } from "../mail/InvoiceEmail";
 import { mailApi } from "../mail/api";
 import { formatDate } from "../patients/api";
@@ -16,6 +17,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   const [selected, setSelected] = useState<number | null>(
     openInvoiceId ?? null,
   );
+  const [batch, setBatch] = useState(false);
 
   const refresh = () => invoicesApi.list().then(setInvoices);
 
@@ -28,6 +30,20 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   return (
     <section>
       <h2>Factures</h2>
+      {batch ? (
+        <BatchSend
+          onSent={() => void refresh()}
+          onClose={() => setBatch(false)}
+        />
+      ) : (
+        invoices.some((i) => !i.sent_at && !i.credit_note) && (
+          <div className="actions">
+            <button type="button" onClick={() => setBatch(true)}>
+              Envoyer les factures non envoyées…
+            </button>
+          </div>
+        )
+      )}
       {current && (
         <InvoiceDetail
           key={current.id}

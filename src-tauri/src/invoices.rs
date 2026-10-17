@@ -160,6 +160,18 @@ pub fn list_for_patient(conn: &Connection, patient_id: i64) -> Result<Vec<Invoic
     list_where(conn, "WHERE patient_id = ?1", &[&patient_id])
 }
 
+/// Neither sent nor cancelled, oldest first.
+pub fn list_unsent(conn: &Connection) -> Result<Vec<InvoiceView>> {
+    let mut invoices = list_where(
+        conn,
+        "WHERE id NOT IN (SELECT invoice_id FROM invoice_sending)
+         AND id NOT IN (SELECT invoice_id FROM credit_note)",
+        &[],
+    )?;
+    invoices.reverse();
+    Ok(invoices)
+}
+
 pub fn get_view(conn: &Connection, id: i64) -> Result<InvoiceView> {
     view(conn, get(conn, id)?)
 }
