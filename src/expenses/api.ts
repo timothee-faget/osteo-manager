@@ -112,3 +112,29 @@ export function formatMonth(month: string) {
     year: "numeric",
   });
 }
+
+/** One month of retrocession at one location. */
+export type RetrocessionMonth = {
+  location_id: number;
+  location_name: string;
+  /** `YYYY-MM` */
+  month: string;
+  receipts_cents: number;
+  rate_bp: number;
+  due_cents: number;
+  paid: { expense_id: number; paid_on: string; amount_cents: number } | null;
+};
+
+export type RetrocessionPayment = {
+  location_id: number;
+  month: string;
+  paid_on: string;
+  amount_cents: number;
+  method: ExpenseMethod;
+};
+
+export const retrocessionsApi = {
+  list: () => invoke<RetrocessionMonth[]>("list_retrocessions"),
+  pay: (payment: RetrocessionPayment) =>
+    invoke<Expense>("pay_retrocession", { payment }),
+};

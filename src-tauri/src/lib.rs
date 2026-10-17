@@ -9,6 +9,7 @@ pub mod invoices;
 pub mod patients;
 pub mod payments;
 pub mod pdf;
+pub mod retrocessions;
 pub mod search;
 pub mod session;
 pub mod sessions;
@@ -135,6 +136,8 @@ pub fn run() {
             accounting::get_journal,
             accounting::get_tax_summary,
             accounting::export_accounting,
+            retrocessions::list_retrocessions,
+            retrocessions::pay_retrocession,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -250,3 +250,77 @@ test("créer puis arrêter une charge récurrente", async () => {
     await screen.findByText("Aucune charge récurrente."),
   ).toBeInTheDocument();
 });
+
+test("rétrocession du mois enregistrée en dépense", async () => {
+  const { user, state } = await setup((s) => {
+    s.retrocessions = [
+      {
+        location_id: 2,
+        location_name: "Cabinet Clara",
+        month: "2026-09",
+        receipts_cents: 120000,
+        rate_bp: 3000,
+        due_cents: 36000,
+        paid: null,
+      },
+      {
+        location_id: 2,
+        location_name: "Cabinet Clara",
+        month: "2026-08",
+        receipts_cents: 100000,
+        rate_bp: 3000,
+        due_cents: 30000,
+        paid: { expense_id: 9, paid_on: "2026-09-05", amount_cents: 30000 },
+      },
+    ];
+  });
+  const toPay = within(
+    screen.getByRole("table", { name: "Rétrocessions à payer" }),
+  );
+  const row = toPay.getByText("septembre 2026").closest("tr")!;
+  expect(within(row).getByText("30 %")).toBeInTheDocument();
+  expect(within(row).getByText("360,00 €")).toBeInTheDocument();
+  expect(toPay.queryByText("août 2026")).not.toBeInTheDocument();
+
+  await user.click(
+    within(row).getByRole("button", { name: "Enregistrer le paiement" }),
+  );
+  const amount = screen.getByLabelText("Montant payé (€)");
+  expect(amount).toHaveValue("360,00");
+  await user.clear(amount);
+  await user.type(amount, "359");
+  await user.click(
+    screen.getByRole("button", { name: "Enregistrer la rétrocession" }),
+  );
+
+  expect(
+    await screen.findByText(
+      "Rétrocession de septembre 2026 enregistrée en dépense.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Aucune rétrocession à payer.")).toBeInTheDocument();
+  expect(calls("pay_retrocession")[0][1]).toMatchObject({
+    payment: {
+      location_id: 2,
+      month: "2026-09",
+      amount_cents: 35900,
+      method: "transfer",
+    },
+  });
+  expect(state.expenses[0]).toMatchObject({
+    supplier: "Cabinet Clara",
+    category: "retrocession",
+  });
+
+  const history = within(
+    screen.getByRole("table", { name: "Historique des rétrocessions" }),
+  );
+  expect(history.getByText("300,00 € le 05/09/2026")).toBeInTheDocument();
+});
+
+test("pas de section rétrocessions sans lieu à taux", async () => {
+  await setup();
+  expect(
+    screen.queryByRole("heading", { name: "Rétrocessions" }),
+  ).not.toBeInTheDocument();
+});
