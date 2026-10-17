@@ -3,7 +3,8 @@ import { errorMessage } from "../lock/api";
 import { formatEuros } from "../money";
 import { BatchSend } from "../mail/BatchSend";
 import { InvoiceEmail } from "../mail/InvoiceEmail";
-import { mailApi } from "../mail/api";
+import { mailApi, type Kind } from "../mail/api";
+import { ReminderHistory } from "../mail/ReminderHistory";
 import { formatDate } from "../patients/api";
 import { invoicesApi, type InvoiceView } from "./api";
 import { PaymentPanel } from "./PaymentPanel";
@@ -32,6 +33,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
       <h2>Factures</h2>
       {batch ? (
         <BatchSend
+          kind="invoice"
           onSent={() => void refresh()}
           onClose={() => setBatch(false)}
         />
@@ -117,7 +119,8 @@ function InvoiceDetail({
 }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [emailing, setEmailing] = useState(false);
+  const [emailing, setEmailing] = useState<Kind | null>(null);
+  const [reminded, setReminded] = useState(0);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{
@@ -196,8 +199,13 @@ function InvoiceDetail({
           Enregistrer le PDF…
         </button>
         {!cn && !emailing && (
-          <button type="button" onClick={() => setEmailing(true)}>
+          <button type="button" onClick={() => setEmailing("invoice")}>
             Envoyer par e-mail…
+          </button>
+        )}
+        {!cn && !emailing && invoice.payment_status !== "paid" && (
+          <button type="button" onClick={() => setEmailing("reminder")}>
+            Relancer par e-mail…
           </button>
         )}
         <button
@@ -254,14 +262,20 @@ function InvoiceDetail({
       </div>
       {emailing && !cn && (
         <InvoiceEmail
+          key={emailing}
           invoiceId={invoice.id}
+          kind={emailing}
           busy={busy}
-          onCancel={() => setEmailing(false)}
+          onCancel={() => setEmailing(null)}
           onSend={(draft) =>
             void run(async () => {
-              await mailApi.sendInvoice(invoice.id, draft);
-              setEmailing(false);
+              await mailApi.send(invoice.id, emailing, draft);
+              setEmailing(null);
               onChange();
+              if (emailing === "reminder") {
+                setReminded(reminded + 1);
+                return `Relance envoyée à ${draft.to.trim()}.`;
+              }
               return `Facture envoyée à ${draft.to.trim()}.`;
             })
           }
@@ -300,6 +314,7 @@ function InvoiceDetail({
         <p role={message.error ? "alert" : "status"}>{message.text}</p>
       )}
       <PaymentPanel invoice={invoice} onChange={onChange} />
+      <ReminderHistory key={reminded} invoiceId={invoice.id} />
       {preview && (
         <figure className="attachment-preview">
           <figcaption>

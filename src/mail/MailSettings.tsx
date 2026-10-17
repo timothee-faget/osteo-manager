@@ -4,6 +4,7 @@ import {
   mailApi,
   PLACEHOLDERS,
   SECURITIES,
+  type Kind,
   type MailSettings as Settings,
   type Security,
   type Template,
@@ -14,15 +15,12 @@ type Draft = Omit<Settings, "port"> & { port: string; password: string };
 /** Outgoing mail server and the invoice e-mail template. */
 export function MailSettings() {
   const [form, setForm] = useState<Draft | null>(null);
-  const [template, setTemplate] = useState<Template | null>(null);
   const { busy, save, setMessage, feedback } = useSave();
-  const templateSave = useSave();
 
   useEffect(() => {
     void mailApi
       .settings()
       .then((s) => setForm({ ...s, port: String(s.port), password: "" }));
-    void mailApi.template("invoice").then(setTemplate);
   }, []);
 
   /** Saves the form; the password only if one was typed. */
@@ -57,7 +55,7 @@ export function MailSettings() {
     }
   }
 
-  if (!form || !template) return null;
+  if (!form) return null;
   const input = (key: keyof Draft, label: string, type = "text") => (
     <label>
       {label}
@@ -121,40 +119,55 @@ export function MailSettings() {
         </button>
       </form>
 
-      <h3>Modèle d'envoi des factures</h3>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void templateSave.save(
-            async () =>
-              setTemplate(await mailApi.saveTemplate("invoice", template)),
-            "Modèle enregistré.",
-          );
-        }}
-      >
-        <label>
-          Objet
-          <input
-            value={template.subject}
-            onChange={(e) =>
-              setTemplate({ ...template, subject: e.target.value })
-            }
-          />
-        </label>
-        <label>
-          Message
-          <textarea
-            rows={8}
-            value={template.body}
-            onChange={(e) => setTemplate({ ...template, body: e.target.value })}
-          />
-        </label>
-        <small>Champs remplacés à l'envoi : {PLACEHOLDERS}.</small>
-        {templateSave.feedback}
-        <button type="submit" disabled={templateSave.busy}>
-          Enregistrer le modèle
-        </button>
-      </form>
+      <TemplateForm kind="invoice" title="Modèle d'envoi des factures" />
+      <TemplateForm kind="reminder" title="Modèle de relance des impayés" />
     </section>
+  );
+}
+
+function TemplateForm({ kind, title }: { kind: Kind; title: string }) {
+  const [template, setTemplate] = useState<Template | null>(null);
+  const { busy, save, feedback } = useSave();
+
+  useEffect(() => {
+    void mailApi.template(kind).then(setTemplate);
+  }, [kind]);
+
+  if (!template) return null;
+  return (
+    <form
+      aria-label={title}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save(
+          async () => setTemplate(await mailApi.saveTemplate(kind, template)),
+          "Modèle enregistré.",
+        );
+      }}
+    >
+      <h3>{title}</h3>
+      <label>
+        Objet
+        <input
+          value={template.subject}
+          onChange={(e) =>
+            setTemplate({ ...template, subject: e.target.value })
+          }
+        />
+      </label>
+      <label>
+        Message
+        <textarea
+          rows={8}
+          value={template.body}
+          onChange={(e) => setTemplate({ ...template, body: e.target.value })}
+        />
+      </label>
+      <small>Champs remplacés à l'envoi : {PLACEHOLDERS}.</small>
+      {feedback}
+      <button type="submit" disabled={busy}>
+        Enregistrer le modèle
+      </button>
+    </form>
   );
 }

@@ -46,6 +46,9 @@ export type UnpaidInvoice = {
   remaining_cents: number;
   /** Days since the invoice was issued. */
   age_days: number;
+  reminder_count: number;
+  /** Local time of the last reminder, if any. */
+  last_reminder_at: string | null;
 };
 
 export type Unpaid = { invoices: UnpaidInvoice[]; total_cents: number };

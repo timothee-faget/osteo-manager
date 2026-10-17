@@ -24,8 +24,13 @@ export type Template = { subject: string; body: string };
 /** A ready-to-send e-mail, reviewed before sending. */
 export type Draft = { to: string; subject: string; body: string };
 
+/** What an e-mail is about; each kind has its template. */
+export type Kind = "invoice" | "reminder";
+
 export const PLACEHOLDERS =
-  "{patient}, {numero}, {date} (de la séance), {montant}, {praticienne}";
+  "{patient}, {numero}, {date} (de la séance), {montant}, {reste} (reste dû), {praticienne}";
+
+export type Reminder = { sent_at: string; recipient: string };
 
 export const mailApi = {
   settings: () => invoke<MailSettings>("get_mail_settings"),
@@ -33,15 +38,25 @@ export const mailApi = {
   saveSettings: (settings: MailSettings, password: string | null) =>
     invoke<MailSettings>("update_mail_settings", { settings, password }),
   test: () => invoke<void>("test_mail_settings"),
-  template: (kind: string) => invoke<Template>("get_mail_template", { kind }),
-  saveTemplate: (kind: string, template: Template) =>
+  template: (kind: Kind) => invoke<Template>("get_mail_template", { kind }),
+  saveTemplate: (kind: Kind, template: Template) =>
     invoke<Template>("update_mail_template", { kind, template }),
-  invoiceDraft: (id: number) => invoke<Draft>("get_invoice_email", { id }),
-  sendInvoice: (id: number, draft: Draft) =>
-    invoke<InvoiceView>("send_invoice_email", { id, draft }),
+  draft: (id: number, kind: Kind) =>
+    invoke<Draft>("get_email_draft", { id, kind }),
+  /** Then the invoice is marked sent, or the reminder recorded. */
+  send: (id: number, kind: Kind, draft: Draft) =>
+    invoke<void>("send_email", { id, kind, draft }),
+  /** Newest first. */
+  reminders: (id: number) =>
+    invoke<Reminder[]>("list_invoice_reminders", { id }),
 };
 
-export type Unsent = { invoice: InvoiceView; draft: Draft };
+/** An invoice with its e-mail, for review before a batch send. */
+export type Pending = {
+  invoice: InvoiceView;
+  draft: Draft;
+  last_reminder_at: string | null;
+};
 
 export type BatchItem = { invoice_id: number; draft: Draft };
 
@@ -53,7 +68,8 @@ export type BatchResult = {
 };
 
 export const batchApi = {
-  unsent: () => invoke<Unsent[]>("list_unsent_invoice_emails"),
-  send: (items: BatchItem[]) =>
-    invoke<BatchResult[]>("send_invoice_emails", { items }),
+  /** Unsent invoices, or for reminders those still due; oldest first. */
+  pending: (kind: Kind) => invoke<Pending[]>("list_pending_emails", { kind }),
+  send: (kind: Kind, items: BatchItem[]) =>
+    invoke<BatchResult[]>("send_emails", { kind, items }),
 };

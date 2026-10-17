@@ -53,6 +53,7 @@ const MESSAGES: Record<string, string> = {
     "Ce lieu n'a pas d'adresse : ajoutez-la dans Paramètres avant de facturer.",
   invalid_invoice: "Facture introuvable.",
   invalid_invoice_cancelled: "Cette facture est déjà annulée par un avoir.",
+  invalid_invoice_paid: "Cette facture est réglée : pas de relance à envoyer.",
   invalid_credit_note: "Avoir introuvable.",
   invalid_payment_amount: "Le montant doit être supérieur à zéro.",
   invalid_payment_amount_format:

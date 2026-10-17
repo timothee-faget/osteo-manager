@@ -2,29 +2,65 @@ import { useEffect, useState } from "react";
 import { errorMessage } from "../lock/api";
 import { formatEuros } from "../money";
 import { formatDate } from "../patients/api";
-import { batchApi, type BatchResult, type Unsent } from "./api";
+import { batchApi, type BatchResult, type Kind, type Pending } from "./api";
 
-type Row = Unsent & { to: string; checked: boolean };
+type Row = Pending & { to: string; checked: boolean };
 
-const rowsOf = (list: Unsent[]): Row[] =>
-  list.map((u) => ({ ...u, to: u.draft.to, checked: u.draft.to !== "" }));
+/** Reminders are preselected for invoices this old, not reminded this recently. */
+export const REMIND_AFTER_DAYS = 30;
 
-/** Every unsent invoice with its e-mail, to review and send in one go. */
+const daysSince = (iso: string) =>
+  Math.floor((Date.now() - new Date(iso.slice(0, 10)).getTime()) / 86_400_000);
+
+const TEXTS = {
+  invoice: {
+    title: "Envoi groupé des factures",
+    noun: "facture",
+    intro:
+      "Vérifiez les destinataires et les messages : chaque facture part avec son PDF en pièce jointe.",
+    empty: "Toutes les factures ont été envoyées.",
+  },
+  reminder: {
+    title: "Relance des impayés",
+    noun: "relance",
+    intro: `Vérifiez les destinataires et les messages : chaque relance part avec la facture en PDF. Sont cochées les factures de plus de ${REMIND_AFTER_DAYS} jours qui n'ont pas été relancées depuis ${REMIND_AFTER_DAYS} jours.`,
+    empty: "Aucune facture à relancer.",
+  },
+};
+
+const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
+function rowsOf(list: Pending[], kind: Kind): Row[] {
+  return list.map((p) => {
+    const due =
+      kind === "invoice" ||
+      (daysSince(p.invoice.issued_on) >= REMIND_AFTER_DAYS &&
+        (!p.last_reminder_at ||
+          daysSince(p.last_reminder_at) >= REMIND_AFTER_DAYS));
+    return { ...p, to: p.draft.to, checked: p.draft.to !== "" && due };
+  });
+}
+
+/** Invoices with their e-mail (unsent ones, or reminders of those still due), to review
+ * and send in one go. */
 export function BatchSend({
+  kind,
   onSent,
   onClose,
 }: {
+  kind: Kind;
   onSent: () => void;
   onClose: () => void;
 }) {
+  const t = TEXTS[kind];
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<BatchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void batchApi.unsent().then((list) => setRows(rowsOf(list)));
-  }, []);
+    void batchApi.pending(kind).then((list) => setRows(rowsOf(list, kind)));
+  }, [kind]);
 
   if (!rows) return null;
   const picked = rows.filter((r) => r.checked && r.to.trim());
@@ -37,6 +73,7 @@ export function BatchSend({
     setReport(null);
     try {
       const results = await batchApi.send(
+        kind,
         picked.map((r) => ({
           invoice_id: r.invoice.id,
           draft: { ...r.draft, to: r.to.trim() },
@@ -68,7 +105,7 @@ export function BatchSend({
   return (
     <div className="batch-send">
       <header>
-        <h3>Envoi groupé des factures</h3>
+        <h3>{t.title}</h3>
         <button type="button" onClick={onClose}>
           Fermer
         </button>
@@ -76,8 +113,7 @@ export function BatchSend({
       {report && (
         <div role="status">
           <p>
-            {sentCount} facture{sentCount > 1 ? "s" : ""} envoyée
-            {sentCount > 1 ? "s" : ""}
+            {plural(sentCount, t.noun)} envoyée{sentCount > 1 ? "s" : ""}
             {failures.length > 0 &&
               `, ${failures.length} en échec (restée${failures.length > 1 ? "s" : ""} cochée${failures.length > 1 ? "s" : ""} ci-dessous)`}
             .
@@ -95,13 +131,10 @@ export function BatchSend({
       )}
       {error && <p role="alert">{error}</p>}
       {rows.length === 0 ? (
-        <p>Toutes les factures ont été envoyées.</p>
+        <p>{t.empty}</p>
       ) : (
         <>
-          <p>
-            Vérifiez les destinataires et les messages : chaque facture part
-            avec son PDF en pièce jointe.
-          </p>
+          <p>{t.intro}</p>
           <table aria-label="Factures à envoyer">
             <thead>
               <tr>
@@ -109,7 +142,8 @@ export function BatchSend({
                 <th>N°</th>
                 <th>Séance</th>
                 <th>Patient</th>
-                <th>Montant</th>
+                <th>{kind === "reminder" ? "Reste dû" : "Montant"}</th>
+                {kind === "reminder" && <th>Dernière relance</th>}
                 <th>Destinataire</th>
                 <th>Message</th>
               </tr>
@@ -131,7 +165,20 @@ export function BatchSend({
                   <td>{r.invoice.number}</td>
                   <td>{formatDate(r.invoice.service_date)}</td>
                   <td>{r.invoice.patient_name}</td>
-                  <td>{formatEuros(r.invoice.amount_cents)}</td>
+                  <td>
+                    {formatEuros(
+                      kind === "reminder"
+                        ? r.invoice.amount_cents - r.invoice.paid_cents
+                        : r.invoice.amount_cents,
+                    )}
+                  </td>
+                  {kind === "reminder" && (
+                    <td>
+                      {r.last_reminder_at
+                        ? formatDate(r.last_reminder_at.slice(0, 10))
+                        : "Jamais"}
+                    </td>
+                  )}
                   <td>
                     <input
                       type="email"
@@ -164,7 +211,7 @@ export function BatchSend({
             >
               {busy
                 ? "Envoi en cours…"
-                : `Envoyer ${picked.length} facture${picked.length > 1 ? "s" : ""}`}
+                : `Envoyer ${plural(picked.length, t.noun)}`}
             </button>
           </div>
         </>
