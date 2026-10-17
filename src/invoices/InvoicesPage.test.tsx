@@ -244,3 +244,75 @@ test("un chèque remis en banque ne se supprime plus", async () => {
     d.queryByRole("button", { name: "Supprimer" }),
   ).not.toBeInTheDocument();
 });
+
+test("filtrer puis exporter en PDF ce qui est affiché", async () => {
+  const { user } = await setup([
+    { ...INVOICE },
+    {
+      ...INVOICE,
+      id: 2,
+      number: "2026-09-004",
+      issued_on: "2026-09-12",
+      location_name: "Domicile",
+    },
+    {
+      ...INVOICE,
+      id: 3,
+      number: "2026-10-002",
+      issued_on: "2026-10-17",
+    },
+    {
+      ...INVOICE,
+      id: 4,
+      number: "2026-10-003",
+      credit_note: {
+        id: 1,
+        number: "AV-2026-10-001",
+        invoice_id: 4,
+        issued_on: "2026-10-18",
+        amount_cents: 6000,
+        reason: "",
+      },
+    },
+  ]);
+  await screen.findByRole("button", { name: "2026-10-001" });
+  expect(
+    screen.getByRole("button", { name: "Exporter en PDF (4)" }),
+  ).toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Du"), "2026-10-01");
+  expect(
+    screen.queryByRole("button", { name: "2026-09-004" }),
+  ).not.toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("Lieu"), "Cabinet");
+  expect(screen.getByText("3 factures")).toBeInTheDocument();
+
+  // A payment status leaves out cancelled invoices.
+  await user.selectOptions(screen.getByLabelText("Paiement"), "Impayée");
+  expect(screen.getByText("2 factures")).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("Paiement"), "Tous");
+
+  vi.mocked(open).mockResolvedValue("/Users/x/Factures");
+  await user.click(screen.getByRole("button", { name: "Exporter en PDF (3)" }));
+  expect(
+    await screen.findByText("4 fichiers PDF exportés dans /Users/x/Factures"),
+  ).toBeInTheDocument();
+  expect(invoke).toHaveBeenCalledWith("export_invoice_pdfs", {
+    ids: [4, 3, 1],
+    folder: "/Users/x/Factures",
+  });
+
+  await user.click(screen.getByRole("button", { name: "Réinitialiser" }));
+  expect(screen.getByText("4 factures")).toBeInTheDocument();
+});
+
+test("aucune facture ne correspond", async () => {
+  const { user } = await setup();
+  await user.type(await screen.findByLabelText("Au"), "2026-01-01");
+  expect(
+    screen.getByText("Aucune facture ne correspond aux filtres."),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Exporter en PDF (0)" }),
+  ).toBeDisabled();
+});

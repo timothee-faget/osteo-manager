@@ -7,8 +7,14 @@ import { mailApi, type Kind } from "../mail/api";
 import { ReminderHistory } from "../mail/ReminderHistory";
 import { formatDate } from "../patients/api";
 import { invoicesApi, type InvoiceView } from "./api";
+import {
+  currentPeriod,
+  filterInvoices,
+  NO_FILTERS,
+  type InvoiceFilters,
+} from "./filters";
 import { PaymentPanel } from "./PaymentPanel";
-import { PAYMENT_STATUSES } from "./paymentsApi";
+import { PAYMENT_STATUSES, type PaymentStatus } from "./paymentsApi";
 
 type Preview = { title: string; url: string };
 
@@ -19,6 +25,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
     openInvoiceId ?? null,
   );
   const [batch, setBatch] = useState(false);
+  const [filters, setFilters] = useState(NO_FILTERS);
 
   const refresh = () => invoicesApi.list().then(setInvoices);
 
@@ -28,6 +35,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
 
   if (!invoices) return null;
   const current = invoices.find((i) => i.id === selected);
+  const shown = filterInvoices(invoices, filters);
   return (
     <section>
       <h2>Factures</h2>
@@ -60,61 +68,202 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
           fiche du patient.
         </p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>N°</th>
-              <th>Date</th>
-              <th>Patient</th>
-              <th>Montant</th>
-              <th>Paiement</th>
-              <th>Envoi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((i) => (
-              <tr key={i.id} className={i.credit_note ? "archived" : undefined}>
-                <td>
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => setSelected(i.id)}
+        <>
+          <Filters
+            invoices={invoices}
+            filters={filters}
+            onChange={setFilters}
+            shown={shown}
+          />
+          {shown.length === 0 ? (
+            <p>Aucune facture ne correspond aux filtres.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>N°</th>
+                  <th>Date</th>
+                  <th>Patient</th>
+                  <th>Montant</th>
+                  <th>Paiement</th>
+                  <th>Envoi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((i) => (
+                  <tr
+                    key={i.id}
+                    className={i.credit_note ? "archived" : undefined}
                   >
-                    {i.number}
-                  </button>
-                  {i.credit_note && (
-                    <span className="badge">
-                      Annulée ({i.credit_note.number})
-                    </span>
-                  )}
-                </td>
-                <td>{formatDate(i.issued_on)}</td>
-                <td>{i.patient_name}</td>
-                <td>{formatEuros(i.amount_cents)}</td>
-                <td>
-                  {i.credit_note ? (
-                    "—"
-                  ) : (
-                    <span className={`status status-${i.payment_status}`}>
-                      {PAYMENT_STATUSES[i.payment_status]}
-                    </span>
-                  )}
-                </td>
-                <td>
-                  {i.sent_at ? (
-                    <span className="status status-sent">
-                      Envoyée le {formatDate(i.sent_at.slice(0, 10))}
-                    </span>
-                  ) : (
-                    <span className="status status-unsent">Non envoyée</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    <td>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setSelected(i.id)}
+                      >
+                        {i.number}
+                      </button>
+                      {i.credit_note && (
+                        <span className="badge">
+                          Annulée ({i.credit_note.number})
+                        </span>
+                      )}
+                    </td>
+                    <td>{formatDate(i.issued_on)}</td>
+                    <td>{i.patient_name}</td>
+                    <td>{formatEuros(i.amount_cents)}</td>
+                    <td>
+                      {i.credit_note ? (
+                        "—"
+                      ) : (
+                        <span className={`status status-${i.payment_status}`}>
+                          {PAYMENT_STATUSES[i.payment_status]}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {i.sent_at ? (
+                        <span className="status status-sent">
+                          Envoyée le {formatDate(i.sent_at.slice(0, 10))}
+                        </span>
+                      ) : (
+                        <span className="status status-unsent">
+                          Non envoyée
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
       )}
     </section>
+  );
+}
+
+/** Filters of the list; the export takes exactly the invoices shown. */
+function Filters({
+  invoices,
+  filters,
+  onChange,
+  shown,
+}: {
+  invoices: InvoiceView[];
+  filters: InvoiceFilters;
+  onChange: (f: InvoiceFilters) => void;
+  shown: InvoiceView[];
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const locations = [...new Set(invoices.map((i) => i.location_name))].sort();
+  const set = (patch: Partial<InvoiceFilters>) => {
+    setMessage(null);
+    onChange({ ...filters, ...patch });
+  };
+
+  async function exportPdfs() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const done = await invoicesApi.exportPdfs(shown.map((i) => i.id));
+      if (done) {
+        setMessage(
+          `${done.count} fichier${done.count > 1 ? "s" : ""} PDF exporté${done.count > 1 ? "s" : ""} dans ${done.folder}`,
+        );
+      }
+    } catch (e) {
+      setMessage(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="invoice-filters">
+      <div className="filters" role="group" aria-label="Filtres">
+        <label>
+          Du
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(e) => set({ from: e.target.value })}
+          />
+        </label>
+        <label>
+          Au
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(e) => set({ to: e.target.value })}
+          />
+        </label>
+        <button type="button" onClick={() => set(currentPeriod("month"))}>
+          Ce mois
+        </button>
+        <button type="button" onClick={() => set(currentPeriod("year"))}>
+          Cette année
+        </button>
+        <label>
+          Paiement
+          <select
+            value={filters.payment}
+            onChange={(e) =>
+              set({ payment: e.target.value as PaymentStatus | "" })
+            }
+          >
+            <option value="">Tous</option>
+            {Object.entries(PAYMENT_STATUSES).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {locations.length > 1 && (
+          <label>
+            Lieu
+            <select
+              value={filters.location}
+              onChange={(e) => set({ location: e.target.value })}
+            >
+              <option value="">Tous</option>
+              {locations.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={filters.cancelled}
+            disabled={filters.payment !== ""}
+            onChange={(e) => set({ cancelled: e.target.checked })}
+          />
+          Factures annulées (avec leur avoir)
+        </label>
+      </div>
+      <div className="actions">
+        <span>
+          {shown.length} facture{shown.length > 1 ? "s" : ""}
+        </span>
+        <button type="button" className="link" onClick={() => set(NO_FILTERS)}>
+          Réinitialiser
+        </button>
+        <button
+          type="button"
+          disabled={busy || shown.length === 0}
+          onClick={() => void exportPdfs()}
+        >
+          Exporter en PDF ({shown.length})
+        </button>
+      </div>
+      {message && <p role="status">{message}</p>}
+    </div>
   );
 }
 

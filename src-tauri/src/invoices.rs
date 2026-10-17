@@ -7,7 +7,7 @@
 //! which cancel a whole invoice (own series `AV-AAAA-MM-NNN`) and free the session to be
 //! corrected and invoiced again.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{Datelike, Local, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -440,6 +440,24 @@ pub fn credit_note_pdf(conn: &Connection, id: i64) -> Result<Vec<u8>> {
     Ok(pdf::credit_note(&credit_note, &invoice, logo.as_ref()))
 }
 
+/// Writes the PDF of each invoice into `folder` (`Facture <n°>.pdf`), plus its credit
+/// note if cancelled (`Avoir <n°>.pdf`). Returns the number of files written.
+pub fn export_pdfs(conn: &Connection, ids: &[i64], folder: &Path) -> Result<usize> {
+    let mut written = 0;
+    for &id in ids {
+        let view = get_view(conn, id)?;
+        let path = folder.join(format!("Facture {}.pdf", view.invoice.number));
+        std::fs::write(path, invoice_pdf(conn, id)?)?;
+        written += 1;
+        if let Some(cn) = view.credit_note {
+            let path = folder.join(format!("Avoir {}.pdf", cn.number));
+            std::fs::write(path, credit_note_pdf(conn, cn.id)?)?;
+            written += 1;
+        }
+    }
+    Ok(written)
+}
+
 // --- Commands ---
 
 fn today() -> NaiveDate {
@@ -490,6 +508,11 @@ pub fn save_credit_note_pdf(state: State, id: i64, path: PathBuf) -> Result<()> 
     let bytes = credit_note_pdf(state.lock().unwrap().conn()?, id)?;
     std::fs::write(path, bytes)?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn export_invoice_pdfs(state: State, ids: Vec<i64>, folder: PathBuf) -> Result<usize> {
+    export_pdfs(state.lock().unwrap().conn()?, &ids, &folder)
 }
 
 #[tauri::command]
@@ -551,5 +574,35 @@ mod tests {
         assert_eq!(rows, [(partial.id, 4000, 27), (recent.id, 6000, 5)]);
         assert_eq!(u.total_cents, 10000);
         assert_eq!(u.invoices[0].patient_name, "Anne Dupont");
+    }
+
+    #[test]
+    fn export_writes_each_invoice_and_its_credit_note() {
+        use crate::test_support::{day, fixture};
+
+        let mut f = fixture();
+        let kept = f.invoice("2026-10-12");
+        let cancelled = f.invoice("2026-10-13");
+        f.invoice("2026-10-14");
+        cancel(&mut f.conn, cancelled.id, "", day("2026-10-14")).unwrap();
+
+        let out = tempfile::tempdir().unwrap();
+        let written = export_pdfs(&f.conn, &[kept.id, cancelled.id], out.path()).unwrap();
+        assert_eq!(written, 3);
+        let mut names: Vec<_> = std::fs::read_dir(out.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "Avoir AV-2026-10-001.pdf",
+                "Facture 2026-10-001.pdf",
+                "Facture 2026-10-002.pdf"
+            ]
+        );
+        let bytes = std::fs::read(out.path().join("Facture 2026-10-001.pdf")).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
     }
 }
