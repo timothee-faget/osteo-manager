@@ -24,6 +24,7 @@
       "Read(./**/*.db)",
       "Read(./**/*.sqlite)",
       "Read(./**/*.osteobak)",
+      "Read(./**/*.osteobackup)",
       "Read(./.env)",
       "Read(./.env.*)"
     ]

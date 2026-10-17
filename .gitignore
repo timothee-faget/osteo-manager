@@ -4,6 +4,7 @@ private/
 *.sqlite
 *.sqlite-*
 *.osteobak
+*.osteobackup
 *.xls
 *.xlsx
 *.xlsm
