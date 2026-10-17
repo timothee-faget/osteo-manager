@@ -182,6 +182,8 @@ function Home({
         <QuickSearch
           onClose={() => setSearching(false)}
           onOpenPatient={(id) => go("patients", { id })}
+          onNewSession={(id) => go("patients", { id, newSession: true })}
+          onCreatePatient={(name) => go("patients", { newPatientName: name })}
           onOpenInvoice={(id) => go("invoices", { id })}
         />
       )}
