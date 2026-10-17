@@ -164,6 +164,61 @@ pub fn get_view(conn: &Connection, id: i64) -> Result<InvoiceView> {
     view(conn, get(conn, id)?)
 }
 
+/// An invoice not fully paid (and not cancelled).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UnpaidInvoice {
+    pub invoice_id: i64,
+    pub number: String,
+    pub issued_on: String,
+    pub patient_id: i64,
+    pub patient_name: String,
+    pub amount_cents: i64,
+    pub remaining_cents: i64,
+    /// Days since the invoice was issued.
+    pub age_days: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Unpaid {
+    pub invoices: Vec<UnpaidInvoice>,
+    pub total_cents: i64,
+}
+
+/// Unpaid and partially paid invoices, oldest first, with the total still due.
+pub fn unpaid(conn: &Connection, today: NaiveDate) -> Result<Unpaid> {
+    let mut stmt = conn.prepare(
+        "SELECT i.id, i.number, i.issued_on, i.patient_id, i.patient_name, i.amount_cents,
+            i.amount_cents - COALESCE(SUM(p.amount_cents), 0) AS remaining
+         FROM invoice i LEFT JOIN payment p ON p.invoice_id = i.id
+         WHERE NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)
+         GROUP BY i.id
+         HAVING remaining > 0
+         ORDER BY i.issued_on, i.year, i.month, i.seq",
+    )?;
+    let invoices: Vec<UnpaidInvoice> = stmt
+        .query_map([], |r| {
+            let issued_on: String = r.get(2)?;
+            let age_days = NaiveDate::parse_from_str(&issued_on, "%Y-%m-%d")
+                .map_or(0, |d| (today - d).num_days());
+            Ok(UnpaidInvoice {
+                invoice_id: r.get(0)?,
+                number: r.get(1)?,
+                issued_on,
+                patient_id: r.get(3)?,
+                patient_name: r.get(4)?,
+                amount_cents: r.get(5)?,
+                remaining_cents: r.get(6)?,
+                age_days,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let total_cents = invoices.iter().map(|i| i.remaining_cents).sum();
+    Ok(Unpaid {
+        invoices,
+        total_cents,
+    })
+}
+
 fn credit_note_from_row(r: &Row) -> rusqlite::Result<CreditNote> {
     Ok(CreditNote {
         id: r.get(0)?,
@@ -376,6 +431,11 @@ pub fn list_invoices(state: State) -> Result<Vec<InvoiceView>> {
     list_all(state.lock().unwrap().conn()?)
 }
 
+#[tauri::command]
+pub fn list_unpaid_invoices(state: State) -> Result<Unpaid> {
+    unpaid(state.lock().unwrap().conn()?, today())
+}
+
 /// Raw PDF bytes, for the preview.
 #[tauri::command]
 pub fn get_invoice_pdf(state: State, id: i64) -> Result<tauri::ipc::Response> {
@@ -432,4 +492,39 @@ mod tests {
     }
 
     // Issuing, numbering and immutability are tested through `sessions::validate`.
+
+    #[test]
+    fn unpaid_lists_what_is_still_due_oldest_first() {
+        use crate::payments::{PaymentInput, PaymentMethod};
+        use crate::test_support::{day, fixture};
+
+        let mut f = fixture();
+        let recent = f.invoice("2026-10-12");
+        let partial = f.invoice("2026-09-20");
+        let paid = f.invoice("2026-09-25");
+        let cancelled = f.invoice("2026-09-01");
+        let mut pay = |invoice_id, amount_cents| {
+            let input = PaymentInput {
+                invoice_id,
+                amount_cents,
+                method: PaymentMethod::Cash,
+                received_on: "2026-10-12".into(),
+                reference: "".into(),
+            };
+            payments::add(&mut f.conn, &input, day("2026-10-12")).unwrap();
+        };
+        pay(partial.id, 2000);
+        pay(paid.id, 6000);
+        cancel(&mut f.conn, cancelled.id, "", day("2026-10-12")).unwrap();
+
+        let u = unpaid(&f.conn, day("2026-10-17")).unwrap();
+        let rows: Vec<_> = u
+            .invoices
+            .iter()
+            .map(|i| (i.invoice_id, i.remaining_cents, i.age_days))
+            .collect();
+        assert_eq!(rows, [(partial.id, 4000, 27), (recent.id, 6000, 5)]);
+        assert_eq!(u.total_cents, 10000);
+        assert_eq!(u.invoices[0].patient_name, "Anne Dupont");
+    }
 }

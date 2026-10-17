@@ -94,6 +94,7 @@ pub fn run() {
             sessions::validate_session,
             invoices::get_invoice,
             invoices::list_invoices,
+            invoices::list_unpaid_invoices,
             invoices::get_invoice_pdf,
             invoices::save_invoice_pdf,
             invoices::get_credit_note_pdf,

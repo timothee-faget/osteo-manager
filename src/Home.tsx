@@ -99,7 +99,9 @@ function Home({
         {page === "invoices" && (
           <InvoicesPage key={target?.seq} openInvoiceId={target?.id} />
         )}
-        {page === "collections" && <CollectionsPage />}
+        {page === "collections" && (
+          <CollectionsPage onOpenInvoice={(id) => go("invoices", id)} />
+        )}
         {page === "expenses" && <ExpensesPage />}
         {page === "assets" && <FixedAssetsPage />}
         {page === "settings" && autoLock !== null && (
