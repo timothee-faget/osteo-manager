@@ -71,6 +71,13 @@ const MESSAGES: Record<string, string> = {
   invalid_day_of_month: "Le jour de paiement doit être compris entre 1 et 31.",
   invalid_start_month: "Mois de début invalide.",
   invalid_recurring_expense: "Charge récurrente introuvable.",
+  invalid_acquired_on: "La date d'acquisition est invalide ou dans le futur.",
+  invalid_cost: "Le coût doit être supérieur à zéro.",
+  invalid_duration: "La durée doit être comprise entre 1 et 50 ans.",
+  invalid_disposed_on:
+    "La date de cession doit être entre la date d'acquisition et aujourd'hui.",
+  invalid_disposal_price: "Le prix de cession ne peut pas être négatif.",
+  invalid_fixed_asset: "Immobilisation introuvable.",
   invalid_recurring_month: "Ce mois est déjà enregistré ou ignoré.",
 };
 
