@@ -272,6 +272,7 @@ pub fn get_credit_note(conn: &Connection, id: i64) -> Result<CreditNote> {
 }
 
 /// Cancels the whole invoice with a credit note and frees its session for correction.
+/// Refused while the invoice has payments.
 pub fn cancel(
     conn: &mut Connection,
     invoice_id: i64,
@@ -282,6 +283,11 @@ pub fn cancel(
     let invoice = get(&tx, invoice_id)?;
     if credit_note_for(&tx, invoice_id)?.is_some() {
         return Err(SessionError::Invalid("invoice_cancelled"));
+    }
+    // Payments would keep counting as revenue on the cancelled invoice, then again once
+    // entered on the corrected one: they must be taken off first.
+    if payments::paid_cents(&tx, invoice_id)? > 0 {
+        return Err(SessionError::Invalid("invoice_has_payments"));
     }
     let (year, month) = (today.year(), today.month());
     let seq: u32 = tx.query_row(
