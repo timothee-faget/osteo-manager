@@ -113,11 +113,16 @@ pub struct Unbilled {
     pub total_cents: i64,
 }
 
+/// A patient's name as the lists show it: "DUPONT Anne".
+fn list_name(last_name: &str, first_name: &str) -> String {
+    format!("{} {first_name}", last_name.to_uppercase())
+}
+
 /// Draft sessions, oldest first, with their total fees. A session whose invoice was
 /// cancelled by a credit note is a draft again, so it shows up here too.
 pub fn unbilled(conn: &Connection) -> Result<Unbilled> {
     let mut stmt = conn.prepare(
-        "SELECT s.id, s.patient_id, p.last_name || ' ' || p.first_name, s.starts_at, s.reason,
+        "SELECT s.id, s.patient_id, p.last_name, p.first_name, s.starts_at, s.reason,
             s.fee_cents
          FROM session s JOIN patient p ON p.id = s.patient_id
          WHERE s.validated_at IS NULL
@@ -128,10 +133,10 @@ pub fn unbilled(conn: &Connection) -> Result<Unbilled> {
             Ok(UnbilledSession {
                 session_id: r.get(0)?,
                 patient_id: r.get(1)?,
-                patient_name: r.get(2)?,
-                starts_at: r.get(3)?,
-                reason: r.get(4)?,
-                fee_cents: r.get(5)?,
+                patient_name: list_name(&r.get::<_, String>(2)?, &r.get::<_, String>(3)?),
+                starts_at: r.get(4)?,
+                reason: r.get(5)?,
+                fee_cents: r.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -167,14 +172,14 @@ pub struct RecentSession {
 /// The latest `limit` sessions, newest first, with their billing status.
 pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUMNS}, p.last_name || ' ' || p.first_name,
+        "SELECT {COLUMNS}, p.last_name, p.first_name,
             EXISTS (SELECT 1 FROM invoice_sending x WHERE x.invoice_id = i.id)
          FROM {FROM} JOIN patient p ON p.id = s.patient_id
          ORDER BY s.starts_at DESC, s.id DESC LIMIT ?1"
     ))?;
     let rows = stmt.query_map([limit], |r| {
         let session = from_row(r)?;
-        let sent: bool = r.get(15)?;
+        let sent: bool = r.get(16)?;
         let status = match session.payment_status {
             None => SessionStatus::Unbilled,
             Some(PaymentStatus::Paid) => SessionStatus::Paid,
@@ -185,7 +190,7 @@ pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
         Ok(RecentSession {
             session_id: session.id,
             patient_id: session.data.patient_id,
-            patient_name: r.get(14)?,
+            patient_name: list_name(&r.get::<_, String>(14)?, &r.get::<_, String>(15)?),
             starts_at: session.data.starts_at,
             reason: session.data.reason,
             fee_cents: session.data.fee_cents,
@@ -430,7 +435,7 @@ mod tests {
             UnbilledSession {
                 session_id: earlier.id,
                 patient_id: f.patient,
-                patient_name: "Dupont Anne".into(),
+                patient_name: "DUPONT Anne".into(),
                 starts_at: "2026-10-01T09:00".into(),
                 reason: "Lombalgie".into(),
                 fee_cents: 6000,
@@ -828,7 +833,7 @@ mod tests {
                 (draft.id, SessionStatus::Unbilled),
             ]
         );
-        assert_eq!(list[0].patient_name, "Dupont Anne");
+        assert_eq!(list[0].patient_name, "DUPONT Anne");
         assert_eq!(list[0].starts_at, "2026-10-10T09:00");
 
         assert_eq!(recent(&f.conn, 2).unwrap().len(), 2);

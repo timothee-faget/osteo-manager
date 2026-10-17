@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Icon } from "../icons";
 import { errorMessage } from "../lock/api";
 import { centsToInput, formatEuros, formatPercent, parseEuros } from "../money";
 import { todayLocal } from "../invoices/paymentsApi";
@@ -41,9 +42,9 @@ export function RetrocessionsSection({ onPaid }: { onPaid: () => void }) {
             <tr>
               <th>Mois</th>
               <th>Lieu</th>
-              <th>CA encaissé</th>
-              <th>Taux</th>
-              <th>Dû</th>
+              <th className="num">CA encaissé</th>
+              <th className="num">Taux</th>
+              <th className="num">Dû</th>
               <th />
             </tr>
           </thead>
@@ -52,9 +53,9 @@ export function RetrocessionsSection({ onPaid }: { onPaid: () => void }) {
               <tr key={keyOf(m)}>
                 <td>{monthLabel(m)}</td>
                 <td>{m.location_name}</td>
-                <td>{formatEuros(m.receipts_cents)}</td>
-                <td>{formatPercent(m.rate_bp)}</td>
-                <td>{formatEuros(m.due_cents)}</td>
+                <td className="num">{formatEuros(m.receipts_cents)}</td>
+                <td className="num">{formatPercent(m.rate_bp)}</td>
+                <td className="num">{formatEuros(m.due_cents)}</td>
                 <td>
                   <button
                     type="button"
@@ -99,15 +100,18 @@ export function RetrocessionsSection({ onPaid }: { onPaid: () => void }) {
         />
       )}
       {feedback}
-      <details>
-        <summary>Historique</summary>
+      <details className="disclosure">
+        <summary>
+          <Icon name="chevron" />
+          Historique
+        </summary>
         <table aria-label="Historique des rétrocessions">
           <thead>
             <tr>
               <th>Mois</th>
               <th>Lieu</th>
-              <th>CA encaissé</th>
-              <th>Dû</th>
+              <th className="num">CA encaissé</th>
+              <th className="num">Dû</th>
               <th>Payé</th>
             </tr>
           </thead>
@@ -116,8 +120,8 @@ export function RetrocessionsSection({ onPaid }: { onPaid: () => void }) {
               <tr key={keyOf(m)}>
                 <td>{monthLabel(m)}</td>
                 <td>{m.location_name}</td>
-                <td>{formatEuros(m.receipts_cents)}</td>
-                <td>{formatEuros(m.due_cents)}</td>
+                <td className="num">{formatEuros(m.receipts_cents)}</td>
+                <td className="num">{formatEuros(m.due_cents)}</td>
                 <td>
                   {m.paid
                     ? `${formatEuros(m.paid.amount_cents)} le ${formatDate(m.paid.paid_on)}`

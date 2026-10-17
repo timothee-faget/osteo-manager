@@ -700,7 +700,9 @@ export function fakeBackend(initial: LockStatus) {
             return {
               session_id: s.id,
               patient_id: s.patient_id,
-              patient_name: p ? `${p.last_name} ${p.first_name}` : "",
+              patient_name: p
+                ? `${p.last_name.toUpperCase()} ${p.first_name}`
+                : "",
               starts_at: s.starts_at,
               reason: s.reason,
               fee_cents: s.fee_cents,
@@ -737,7 +739,9 @@ export function fakeBackend(initial: LockStatus) {
                 return {
                   session_id: s.id,
                   patient_id: s.patient_id,
-                  patient_name: p ? `${p.last_name} ${p.first_name}` : "",
+                  patient_name: p
+                    ? `${p.last_name.toUpperCase()} ${p.first_name}`
+                    : "",
                   starts_at: s.starts_at,
                   reason: s.reason,
                   fee_cents: s.fee_cents,

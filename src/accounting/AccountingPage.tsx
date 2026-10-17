@@ -1,3 +1,4 @@
+import { YearNav } from "../YearNav";
 import { useEffect, useState } from "react";
 import { KeyFigures } from "../dashboard/KeyFigures";
 import { formatEuros } from "../money";
@@ -47,23 +48,7 @@ export function AccountingPage() {
     <section>
       <h2>Comptabilité</h2>
       <KeyFigures />
-      <header className="year">
-        <button
-          type="button"
-          aria-label="Année précédente"
-          onClick={() => setYear(year - 1)}
-        >
-          ◀
-        </button>
-        <h3>{year}</h3>
-        <button
-          type="button"
-          aria-label="Année suivante"
-          onClick={() => setYear(year + 1)}
-        >
-          ▶
-        </button>
-      </header>
+      <YearNav year={year} onChange={setYear} />
       <div className="actions">
         Exporter :
         {EXPORTS.map(([kind, label]) => (
@@ -90,7 +75,7 @@ export function AccountingPage() {
             <tr>
               <th>Ligne</th>
               <th>{section.title}</th>
-              <th>Montant</th>
+              <th className="num">Montant</th>
             </tr>
           </thead>
           <tbody>
@@ -105,7 +90,7 @@ export function AccountingPage() {
                 <tr key={i} className={l.total ? "total" : undefined}>
                   <td>{l.line}</td>
                   <td>{l.label}</td>
-                  <td>{formatEuros(l.amount_cents)}</td>
+                  <td className="num">{formatEuros(l.amount_cents)}</td>
                 </tr>
               ))
             )}
@@ -124,8 +109,8 @@ export function AccountingPage() {
               <th>Libellé</th>
               <th>Catégorie</th>
               <th>Mode</th>
-              <th>Recette</th>
-              <th>Dépense</th>
+              <th className="num">Recette</th>
+              <th className="num">Dépense</th>
             </tr>
           </thead>
           <tbody>
@@ -138,8 +123,12 @@ export function AccountingPage() {
                 </td>
                 <td>{e.category}</td>
                 <td>{e.method}</td>
-                <td>{e.receipt_cents ? formatEuros(e.receipt_cents) : ""}</td>
-                <td>{e.expense_cents ? formatEuros(e.expense_cents) : ""}</td>
+                <td className="num">
+                  {e.receipt_cents ? formatEuros(e.receipt_cents) : ""}
+                </td>
+                <td className="num">
+                  {e.expense_cents ? formatEuros(e.expense_cents) : ""}
+                </td>
               </tr>
             ))}
             <tr className="total">
@@ -147,8 +136,8 @@ export function AccountingPage() {
               <td>Total</td>
               <td />
               <td />
-              <td>{formatEuros(journal.receipts_cents)}</td>
-              <td>{formatEuros(journal.expenses_cents)}</td>
+              <td className="num">{formatEuros(journal.receipts_cents)}</td>
+              <td className="num">{formatEuros(journal.expenses_cents)}</td>
             </tr>
           </tbody>
         </table>

@@ -106,7 +106,7 @@ export function RecurringSection({
               <th>Charge</th>
               <th>Catégorie</th>
               <th>Mode</th>
-              <th>Montant</th>
+              <th className="num">Montant</th>
               <th>Échéance</th>
               <th />
             </tr>
@@ -120,7 +120,7 @@ export function RecurringSection({
                 </td>
                 <td>{categoryLabel(r.category)}</td>
                 <td>{EXPENSE_METHODS[r.method]}</td>
-                <td>{formatEuros(r.amount_cents)}</td>
+                <td className="num">{formatEuros(r.amount_cents)}</td>
                 <td>
                   le {r.day_of_month} du mois, depuis{" "}
                   {formatMonth(r.start_month)}

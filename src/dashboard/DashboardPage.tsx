@@ -206,7 +206,7 @@ export function DashboardPage({
                   <th>Date</th>
                   <th>Patient</th>
                   <th>Motif</th>
-                  <th>Tarif</th>
+                  <th className="num">Tarif</th>
                   <th>Statut</th>
                 </tr>
               </thead>
@@ -226,9 +226,9 @@ export function DashboardPage({
                         {formatDateTime(s.starts_at)}
                       </button>
                     </td>
-                    <td>{s.patient_name}</td>
+                    <td className="patient">{s.patient_name}</td>
                     <td>{s.reason}</td>
-                    <td>{formatEuros(s.fee_cents)}</td>
+                    <td className="num">{formatEuros(s.fee_cents)}</td>
                     <td>
                       <span className={`status status-${s.status}`}>
                         {SESSION_STATUSES[s.status]}
@@ -317,7 +317,7 @@ export function DashboardPage({
                 <th>Date</th>
                 <th>Patient</th>
                 <th>Motif</th>
-                <th>Tarif</th>
+                <th className="num">Tarif</th>
                 <th />
               </tr>
             </thead>
@@ -325,9 +325,9 @@ export function DashboardPage({
               {d.unbilled_sessions.map((s) => (
                 <tr key={s.session_id}>
                   <td>{formatDateTime(s.starts_at)}</td>
-                  <td>{s.patient_name}</td>
+                  <td className="patient">{s.patient_name}</td>
                   <td>{s.reason}</td>
-                  <td>{formatEuros(s.fee_cents)}</td>
+                  <td className="num">{formatEuros(s.fee_cents)}</td>
                   <td>
                     <button
                       type="button"

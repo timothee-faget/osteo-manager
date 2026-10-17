@@ -38,21 +38,20 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   const shown = filterInvoices(invoices, filters);
   return (
     <section>
-      <h2>Factures</h2>
-      {batch ? (
+      <header>
+        <h2>Factures</h2>
+        {!batch && invoices.some((i) => !i.sent_at && !i.credit_note) && (
+          <button className="cta" type="button" onClick={() => setBatch(true)}>
+            Envoyer les factures non envoyées…
+          </button>
+        )}
+      </header>
+      {batch && (
         <BatchSend
           kind="invoice"
           onSent={() => void refresh()}
           onClose={() => setBatch(false)}
         />
-      ) : (
-        invoices.some((i) => !i.sent_at && !i.credit_note) && (
-          <div className="actions">
-            <button type="button" onClick={() => setBatch(true)}>
-              Envoyer les factures non envoyées…
-            </button>
-          </div>
-        )
       )}
       {current && (
         <InvoiceDetail
@@ -84,7 +83,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
                   <th>N°</th>
                   <th>Date</th>
                   <th>Patient</th>
-                  <th>Montant</th>
+                  <th className="num">Montant</th>
                   <th>Paiement</th>
                   <th>Envoi</th>
                 </tr>
@@ -111,7 +110,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
                     </td>
                     <td>{formatDate(i.issued_on)}</td>
                     <td>{i.patient_name}</td>
-                    <td>{formatEuros(i.amount_cents)}</td>
+                    <td className="num">{formatEuros(i.amount_cents)}</td>
                     <td>
                       {i.credit_note ? (
                         "—"

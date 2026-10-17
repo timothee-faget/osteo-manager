@@ -1,3 +1,4 @@
+import { YearNav } from "../YearNav";
 import { useEffect, useState } from "react";
 import { formatEuros } from "../money";
 import { formatDate } from "../patients/api";
@@ -72,9 +73,18 @@ export function ExpensesPage() {
 
   return (
     <section>
-      <h2>Dépenses</h2>
+      <header>
+        <h2>Dépenses</h2>
+        <button
+          className="cta"
+          type="button"
+          onClick={() => setEditing({ kind: "new" })}
+        >
+          Nouvelle dépense
+        </button>
+      </header>
       {due.length > 0 && (
-        <section className="due">
+        <section className="card due">
           <h3>Charges récurrentes à confirmer</h3>
           <table>
             <tbody>
@@ -82,7 +92,7 @@ export function ExpensesPage() {
                 <tr key={`${d.recurring_id}-${d.month}`}>
                   <td>{formatMonth(d.month)}</td>
                   <td>{d.label}</td>
-                  <td>{formatEuros(d.amount_cents)}</td>
+                  <td className="num">{formatEuros(d.amount_cents)}</td>
                   <td className="actions">
                     <button
                       type="button"
@@ -134,7 +144,7 @@ export function ExpensesPage() {
       )}
       <RetrocessionsSection onPaid={() => void refresh()} />
       {feedback}
-      {editing ? (
+      {editing && (
         <ExpenseForm
           // A new target starts a fresh form.
           key={
@@ -147,33 +157,10 @@ export function ExpensesPage() {
           onDone={done}
           onCancel={() => setEditing(null)}
         />
-      ) : (
-        <button
-          className="primary"
-          type="button"
-          onClick={() => setEditing({ kind: "new" })}
-        >
-          Nouvelle dépense
-        </button>
       )}
-      <header className="year">
-        <button
-          type="button"
-          aria-label="Année précédente"
-          onClick={() => setYear(year - 1)}
-        >
-          ◀
-        </button>
-        <h3>{year}</h3>
-        <button
-          type="button"
-          aria-label="Année suivante"
-          onClick={() => setYear(year + 1)}
-        >
-          ▶
-        </button>
-        <span>Total : {formatEuros(total)}</span>
-      </header>
+      <YearNav year={year} onChange={setYear}>
+        Total : {formatEuros(total)}
+      </YearNav>
       {expenses.length === 0 ? (
         <p>Aucune dépense en {year}.</p>
       ) : (
@@ -184,7 +171,7 @@ export function ExpensesPage() {
               <th>Fournisseur</th>
               <th>Catégorie</th>
               <th>Mode</th>
-              <th>Montant</th>
+              <th className="num">Montant</th>
               <th>Justificatif</th>
             </tr>
           </thead>
@@ -204,7 +191,7 @@ export function ExpensesPage() {
                 </td>
                 <td>{categoryLabel(e.category)}</td>
                 <td>{EXPENSE_METHODS[e.method]}</td>
-                <td>{formatEuros(e.amount_cents)}</td>
+                <td className="num">{formatEuros(e.amount_cents)}</td>
                 <td>{e.receipt ? "Oui" : "—"}</td>
               </tr>
             ))}

@@ -97,7 +97,7 @@ export function LocationSettings() {
               <th>Nom</th>
               <th>Type</th>
               <th>Adresse</th>
-              <th>Rétrocession</th>
+              <th className="num">Rétrocession</th>
               <th />
             </tr>
           </thead>
@@ -110,7 +110,7 @@ export function LocationSettings() {
                 </td>
                 <td>{LOCATION_KINDS[l.kind]}</td>
                 <td className="multiline">{l.address}</td>
-                <td>{formatPercent(l.retrocession_rate_bp)}</td>
+                <td className="num">{formatPercent(l.retrocession_rate_bp)}</td>
                 <td>
                   <button type="button" onClick={() => edit(l)}>
                     Modifier

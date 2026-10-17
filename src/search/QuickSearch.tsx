@@ -1,4 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
+import { Icon } from "../icons";
 import { formatEuros } from "../money";
 import { formatDate } from "../patients/api";
 import { searchApi, type SearchResults } from "./api";
@@ -153,14 +154,18 @@ export function QuickSearch({
         className="quick-search"
         onClick={(e) => e.stopPropagation()}
       >
-        <input
-          autoFocus
-          aria-label="Rechercher un patient ou une facture"
-          placeholder="Nom, date de naissance, téléphone, n° de facture…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={onKeyDown}
-        />
+        <div className="search-field">
+          <Icon name="search" />
+          <input
+            type="search"
+            autoFocus
+            aria-label="Rechercher un patient ou une facture"
+            placeholder="Nom, date de naissance, téléphone, n° de facture…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
+        </div>
         {items.length > 0 && (
           <ul role="listbox" aria-label="Résultats">
             {section(["patient", "create"], "Patients")}

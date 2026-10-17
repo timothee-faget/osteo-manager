@@ -1,3 +1,4 @@
+import { YearNav } from "../YearNav";
 import { useEffect, useState, type FormEvent } from "react";
 import { errorMessage } from "../lock/api";
 import { centsToInput, formatEuros, parseEuros } from "../money";
@@ -64,12 +65,21 @@ export function FixedAssetsPage() {
   if (!register) return null;
   return (
     <section>
-      <h2>Immobilisations</h2>
+      <header>
+        <h2>Immobilisations</h2>
+        <button
+          className="cta"
+          type="button"
+          onClick={() => setEditing({ asset: null })}
+        >
+          Ajouter une immobilisation
+        </button>
+      </header>
       <p>
         Matériel durable (table, ordinateur, mobilier…) amorti sur plusieurs
         années : ne le saisissez pas aussi en dépense.
       </p>
-      {editing ? (
+      {editing && (
         <AssetForm
           key={editing.asset?.id ?? "new"}
           asset={editing.asset}
@@ -79,35 +89,10 @@ export function FixedAssetsPage() {
           }}
           onCancel={() => setEditing(null)}
         />
-      ) : (
-        <button
-          className="primary"
-          type="button"
-          onClick={() => setEditing({ asset: null })}
-        >
-          Ajouter une immobilisation
-        </button>
       )}
-      <header className="year">
-        <button
-          type="button"
-          aria-label="Année précédente"
-          onClick={() => setYear(year - 1)}
-        >
-          ◀
-        </button>
-        <h3>{year}</h3>
-        <button
-          type="button"
-          aria-label="Année suivante"
-          onClick={() => setYear(year + 1)}
-        >
-          ▶
-        </button>
-        <span>
-          Dotation aux amortissements : {formatEuros(register.total_cents)}
-        </span>
-      </header>
+      <YearNav year={year} onChange={setYear}>
+        Dotation aux amortissements : {formatEuros(register.total_cents)}
+      </YearNav>
       {register.assets.length === 0 ? (
         <p>Aucune immobilisation en {year}.</p>
       ) : (
@@ -116,10 +101,10 @@ export function FixedAssetsPage() {
             <tr>
               <th>Désignation</th>
               <th>Acquise le</th>
-              <th>Coût</th>
+              <th className="num">Coût</th>
               <th>Durée</th>
-              <th>Dotation {year}</th>
-              <th>Valeur nette fin {year}</th>
+              <th className="num">Dotation {year}</th>
+              <th className="num">Valeur nette fin {year}</th>
             </tr>
           </thead>
           <tbody>
@@ -136,10 +121,10 @@ export function FixedAssetsPage() {
                   {a.disposed_on && ` (cédée le ${formatDate(a.disposed_on)})`}
                 </td>
                 <td>{formatDate(a.acquired_on)}</td>
-                <td>{formatEuros(a.cost_cents)}</td>
+                <td className="num">{formatEuros(a.cost_cents)}</td>
                 <td>{a.duration_years} ans</td>
-                <td>{formatEuros(a.annuity_cents)}</td>
-                <td>{formatEuros(a.net_cents)}</td>
+                <td className="num">{formatEuros(a.annuity_cents)}</td>
+                <td className="num">{formatEuros(a.net_cents)}</td>
               </tr>
             ))}
           </tbody>
@@ -267,18 +252,18 @@ function AssetForm({
           <thead>
             <tr>
               <th>Année</th>
-              <th>Dotation</th>
-              <th>Cumul</th>
-              <th>Valeur nette</th>
+              <th className="num">Dotation</th>
+              <th className="num">Cumul</th>
+              <th className="num">Valeur nette</th>
             </tr>
           </thead>
           <tbody>
             {plan.map((a) => (
               <tr key={a.year}>
                 <td>{a.year}</td>
-                <td>{formatEuros(a.amount_cents)}</td>
-                <td>{formatEuros(a.cumulative_cents)}</td>
-                <td>{formatEuros(a.net_cents)}</td>
+                <td className="num">{formatEuros(a.amount_cents)}</td>
+                <td className="num">{formatEuros(a.cumulative_cents)}</td>
+                <td className="num">{formatEuros(a.net_cents)}</td>
               </tr>
             ))}
           </tbody>
