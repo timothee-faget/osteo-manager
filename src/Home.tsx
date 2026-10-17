@@ -32,6 +32,12 @@ const PAGES: Record<Page, string> = {
   settings: "Paramètres",
 };
 
+/** Daily pages first; bookkeeping below; settings sit with the other actions. */
+const NAV: [string, Page[]][] = [
+  ["Cabinet", ["home", "patients", "invoices", "collections"]],
+  ["Gestion", ["expenses", "assets", "accounting"]],
+];
+
 /** Where to land on arrival; `seq` remounts the page even for the same page. */
 type Target = {
   seq: number;
@@ -84,18 +90,30 @@ function Home({
       <aside className="sidebar">
         <h1 className="brand">Osteo Manager</h1>
         <nav aria-label="Navigation">
-          {(Object.keys(PAGES) as Page[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              aria-current={page === p ? "page" : undefined}
-              onClick={() => go(p)}
-            >
-              {PAGES[p]}
-            </button>
+          {NAV.map(([group, pages]) => (
+            <div key={group} role="group" aria-label={group}>
+              {group !== NAV[0][0] && <p className="nav-group">{group}</p>}
+              {pages.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  aria-current={page === p ? "page" : undefined}
+                  onClick={() => go(p)}
+                >
+                  {PAGES[p]}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="sidebar-actions">
+          <button
+            type="button"
+            aria-current={page === "settings" ? "page" : undefined}
+            onClick={() => go("settings")}
+          >
+            {PAGES.settings}
+          </button>
           <button type="button" onClick={() => setSearching(true)}>
             Rechercher <kbd>⌘K</kbd>
           </button>
