@@ -106,6 +106,51 @@ pub fn list_for_patient(conn: &Connection, patient_id: i64) -> Result<Vec<Sessio
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UnbilledSession {
+    pub session_id: i64,
+    pub patient_id: i64,
+    pub patient_name: String,
+    pub starts_at: String,
+    pub reason: String,
+    pub fee_cents: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Unbilled {
+    pub sessions: Vec<UnbilledSession>,
+    pub total_cents: i64,
+}
+
+/// Draft sessions, oldest first, with their total fees. A session whose invoice was
+/// cancelled by a credit note is a draft again, so it shows up here too.
+pub fn unbilled(conn: &Connection) -> Result<Unbilled> {
+    let mut stmt = conn.prepare(
+        "SELECT s.id, s.patient_id, p.last_name || ' ' || p.first_name, s.starts_at, s.reason,
+            s.fee_cents
+         FROM session s JOIN patient p ON p.id = s.patient_id
+         WHERE s.validated_at IS NULL
+         ORDER BY s.starts_at, s.id",
+    )?;
+    let sessions: Vec<UnbilledSession> = stmt
+        .query_map([], |r| {
+            Ok(UnbilledSession {
+                session_id: r.get(0)?,
+                patient_id: r.get(1)?,
+                patient_name: r.get(2)?,
+                starts_at: r.get(3)?,
+                reason: r.get(4)?,
+                fee_cents: r.get(5)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let total_cents = sessions.iter().map(|s| s.fee_cents).sum();
+    Ok(Unbilled {
+        sessions,
+        total_cents,
+    })
+}
+
 /// The fee to pre-fill: home-visit fee at the patient's home, standard fee elsewhere.
 pub fn default_fee(conn: &Connection, location_id: i64) -> Result<i64> {
     let location = settings::location(conn, location_id)?;
@@ -331,6 +376,36 @@ mod tests {
 
         delete(&f.conn, b.id).unwrap();
         assert_eq!(list_for_patient(&f.conn, f.patient).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn unbilled_lists_drafts_oldest_first_including_cancelled_invoices() {
+        let mut f = fixture();
+        let later = f.session("2026-10-08T09:00");
+        let earlier = f.session("2026-10-01T09:00");
+        let invoiced = f.session("2026-10-02T09:00");
+        let cancelled = f.session("2026-10-03T09:00");
+        f.validate(invoiced.id, "2026-10-02").unwrap();
+        let (_, inv) = f.validate(cancelled.id, "2026-10-03").unwrap();
+        invoices::cancel(&mut f.conn, inv.id, "", day("2026-10-04")).unwrap();
+
+        let u = unbilled(&f.conn).unwrap();
+        assert_eq!(
+            u.sessions.iter().map(|s| s.session_id).collect::<Vec<_>>(),
+            [earlier.id, cancelled.id, later.id]
+        );
+        assert_eq!(u.total_cents, 18000);
+        assert_eq!(
+            u.sessions[0],
+            UnbilledSession {
+                session_id: earlier.id,
+                patient_id: f.patient,
+                patient_name: "Dupont Anne".into(),
+                starts_at: "2026-10-01T09:00".into(),
+                reason: "Lombalgie".into(),
+                fee_cents: 6000,
+            }
+        );
     }
 
     #[test]

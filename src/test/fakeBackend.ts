@@ -687,7 +687,21 @@ export function fakeBackend(initial: LockStatus) {
       case "delete_fixed_asset":
         state.assets = state.assets.filter((x) => x.id !== a.id);
         return;
-      case "get_dashboard":
+      case "get_dashboard": {
+        const unbilledOf = (drafts: Session[]) => ({
+          unbilled_sessions: drafts.map((s) => {
+            const p = state.patients.find((x) => x.id === s.patient_id);
+            return {
+              session_id: s.id,
+              patient_id: s.patient_id,
+              patient_name: p ? `${p.last_name} ${p.first_name}` : "",
+              starts_at: s.starts_at,
+              reason: s.reason,
+              fee_cents: s.fee_cents,
+            };
+          }),
+          unbilled_cents: drafts.reduce((t, s) => t + s.fee_cents, 0),
+        });
         return (
           state.dashboard ?? {
             month: emptyPeriod("2026-10-01", "2026-10-17"),
@@ -699,8 +713,10 @@ export function fakeBackend(initial: LockStatus) {
             unpaid_cents: 0,
             cheques_to_deposit: 0,
             cheques_to_deposit_cents: 0,
+            ...unbilledOf(state.sessions.filter((s) => !s.validated_at)),
           }
         );
+      }
       case "get_journal":
         return (
           state.journal ?? {

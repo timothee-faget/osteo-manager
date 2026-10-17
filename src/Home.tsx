@@ -97,7 +97,10 @@ function Home({
       </aside>
       <main className="container">
         {page === "home" && (
-          <DashboardPage onOpenCollections={() => go("collections")} />
+          <DashboardPage
+            onOpenCollections={() => go("collections")}
+            onOpenPatient={(id) => go("patients", id)}
+          />
         )}
         {page === "patients" && (
           <PatientsPage key={target?.seq} openPatientId={target?.id} />

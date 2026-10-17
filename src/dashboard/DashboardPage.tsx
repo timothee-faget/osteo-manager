@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { formatMonth } from "../expenses/api";
+import { errorMessage } from "../lock/api";
 import { formatEuros } from "../money";
-import { dashboardApi, type Dashboard, type Period } from "./api";
+import { formatDateTime, sessionsApi } from "../patients/sessionsApi";
+import {
+  dashboardApi,
+  type Dashboard,
+  type Period,
+  type UnbilledSession,
+} from "./api";
 
 const ROWS: [string, (p: Period) => string][] = [
   ["CA encaissé", (p) => formatEuros(p.receipts_cents)],
@@ -16,17 +23,40 @@ const ROWS: [string, (p: Period) => string][] = [
 
 const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
 
-/** Home page: key figures, what is left to collect, revenue by location. */
+/** Home page: key figures, what is left to collect or invoice, revenue by location. */
 export function DashboardPage({
   onOpenCollections,
+  onOpenPatient,
 }: {
   onOpenCollections: () => void;
+  onOpenPatient: (id: number) => void;
 }) {
   const [d, setD] = useState<Dashboard | null>(null);
+  const [showUnbilled, setShowUnbilled] = useState(false);
+  const [confirm, setConfirm] = useState<UnbilledSession | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void dashboardApi.get().then(setD);
   }, []);
+
+  async function validate(s: UnbilledSession) {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const saved = await sessionsApi.validate(s.session_id);
+      setMessage(`Facture ${saved.invoice_number} émise.`);
+      setD(await dashboardApi.get());
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+      setConfirm(null);
+    }
+  }
 
   if (!d) return null;
   const month = formatMonth(d.month.from.slice(0, 7));
@@ -77,7 +107,83 @@ export function DashboardPage({
           Chèques à remettre : {plural(d.cheques_to_deposit, "chèque")},{" "}
           {formatEuros(d.cheques_to_deposit_cents)}
         </button>
+        <button
+          type="button"
+          aria-expanded={showUnbilled}
+          onClick={() => setShowUnbilled(!showUnbilled)}
+        >
+          Séances non facturées : {plural(d.unbilled_sessions.length, "séance")}
+          , {formatEuros(d.unbilled_cents)}
+        </button>
       </div>
+      {message && <p role="status">{message}</p>}
+      {error && <p role="alert">{error}</p>}
+      {showUnbilled &&
+        (d.unbilled_sessions.length === 0 ? (
+          <p>Aucune séance non facturée.</p>
+        ) : (
+          <>
+            {confirm && (
+              <div className="confirm">
+                <p>
+                  Facturer la séance du {formatDateTime(confirm.starts_at)} (
+                  {confirm.patient_name}) ? La facture va être émise avec le
+                  prochain numéro. Elle ne pourra plus être modifiée ni
+                  supprimée (seulement annulée par un avoir).
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void validate(confirm)}
+                >
+                  Confirmer et émettre la facture
+                </button>
+                <button type="button" onClick={() => setConfirm(null)}>
+                  Annuler
+                </button>
+              </div>
+            )}
+            <table aria-label="Séances non facturées">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Patient</th>
+                  <th>Motif</th>
+                  <th>Tarif</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {d.unbilled_sessions.map((s) => (
+                  <tr key={s.session_id}>
+                    <td>{formatDateTime(s.starts_at)}</td>
+                    <td>{s.patient_name}</td>
+                    <td>{s.reason}</td>
+                    <td>{formatEuros(s.fee_cents)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMessage(null);
+                          setError(null);
+                          setConfirm(s);
+                        }}
+                      >
+                        Valider
+                      </button>{" "}
+                      <button
+                        type="button"
+                        onClick={() => onOpenPatient(s.patient_id)}
+                      >
+                        Fiche patient
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ))}
 
       <h3>CA encaissé par lieu depuis le 1er janvier</h3>
       {d.by_location.length === 0 ? (
