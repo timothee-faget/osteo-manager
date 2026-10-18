@@ -370,6 +370,30 @@ Bien cordialement,
     ALTER TABLE session DROP COLUMN examination;
     ALTER TABLE session DROP COLUMN treatment;
     ALTER TABLE session DROP COLUMN advice;",
+    // v15: the history and the review of systems become a single free text, each former
+    // field under its heading (see `patients::CLINICAL_HISTORY_TEMPLATE`).
+    "ALTER TABLE patient ADD COLUMN clinical_history TEXT NOT NULL DEFAULT '';
+    UPDATE patient SET clinical_history = 'Antécédents'
+        || char(10) || 'Médicaux :' || iif(medical_history <> '', ' ' || medical_history, '')
+        || char(10) || 'Chirurgicaux :' || iif(surgical_history <> '', ' ' || surgical_history, '')
+        || char(10) || 'Traumatiques :' || iif(trauma_history <> '', ' ' || trauma_history, '')
+        || char(10) || 'Traitement en cours :'
+            || iif(current_treatment <> '', ' ' || current_treatment, '')
+        || char(10, 10) || 'Revue des systèmes'
+        || char(10) || 'ORL :' || iif(ent <> '', ' ' || ent, '')
+        || char(10) || 'Cardio-pulmonaire :' || iif(cardio_pulmonary <> '', ' ' || cardio_pulmonary, '')
+        || char(10) || 'Digestif :' || iif(digestive <> '', ' ' || digestive, '')
+        || char(10) || 'Gynécologique :' || iif(gynecological <> '', ' ' || gynecological, '')
+        || char(10) || 'Hygiène de vie :' || iif(lifestyle <> '', ' ' || lifestyle, '');
+    ALTER TABLE patient DROP COLUMN medical_history;
+    ALTER TABLE patient DROP COLUMN surgical_history;
+    ALTER TABLE patient DROP COLUMN trauma_history;
+    ALTER TABLE patient DROP COLUMN current_treatment;
+    ALTER TABLE patient DROP COLUMN ent;
+    ALTER TABLE patient DROP COLUMN cardio_pulmonary;
+    ALTER TABLE patient DROP COLUMN digestive;
+    ALTER TABLE patient DROP COLUMN gynecological;
+    ALTER TABLE patient DROP COLUMN lifestyle;",
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -615,6 +639,47 @@ mod tests {
         );
         assert!(
             conn.prepare("SELECT anamnesis FROM session").is_err(),
+            "old columns are dropped"
+        );
+    }
+
+    #[test]
+    fn v15_merges_history_and_review_of_systems() {
+        let (_dir, path) = db_path();
+        let conn = open_with(&path, &KEY, &MIGRATIONS[..14]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO patient (id, last_name, first_name, medical_history, surgical_history,
+                bps_context, digestive, lifestyle, created_at, updated_at)
+                VALUES (1, 'Dupont', 'Anne', 'Asthme', '', 'Deux enfants', 'Reflux',
+                    'Sommeil court' || char(10) || 'Peu de sport', 't', 't'),
+                (2, 'Martin', 'Paul', '', '', '', '', '', 't', 't');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let conn = open_with(&path, &KEY, MIGRATIONS).unwrap();
+        let rows: Vec<(String, String)> = conn
+            .prepare("SELECT clinical_history, bps_context FROM patient ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            rows[0],
+            (
+                "Antécédents\nMédicaux : Asthme\nChirurgicaux :\nTraumatiques :\n\
+                 Traitement en cours :\n\nRevue des systèmes\nORL :\nCardio-pulmonaire :\n\
+                 Digestif : Reflux\nGynécologique :\nHygiène de vie : Sommeil court\n\
+                 Peu de sport"
+                    .into(),
+                "Deux enfants".into()
+            )
+        );
+        // An empty record gets the same headings as a new one.
+        assert_eq!(rows[1].0, crate::patients::CLINICAL_HISTORY_TEMPLATE);
+        assert!(
+            conn.prepare("SELECT medical_history FROM patient").is_err(),
             "old columns are dropped"
         );
     }

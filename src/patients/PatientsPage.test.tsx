@@ -87,8 +87,14 @@ test("notes patient éditables en consultation", async () => {
   const { user, state } = await setup();
   await createPatient(user, "Dupont", "Anne");
   const notes = within(screen.getByRole("form", { name: "Notes patient" }));
-  await user.type(notes.getByLabelText("Chirurgicaux"), "Appendicectomie 1995");
-  await user.type(notes.getByLabelText("Digestif"), "Reflux");
+  const history = notes.getByLabelText("Antécédents et revue des systèmes");
+  // A new record starts with the headings.
+  expect(history).toHaveValue("Antécédents\nMédicaux :");
+  await user.type(history, " Asthme");
+  await user.type(
+    notes.getByLabelText("Contexte bio-psycho-social"),
+    "Deux enfants",
+  );
   await user.click(
     notes.getByRole("button", { name: "Enregistrer les notes" }),
   );
@@ -96,8 +102,8 @@ test("notes patient éditables en consultation", async () => {
     "Notes enregistrées.",
   );
   expect(state.patients[0]).toMatchObject({
-    surgical_history: "Appendicectomie 1995",
-    digestive: "Reflux",
+    clinical_history: "Antécédents\nMédicaux : Asthme",
+    bps_context: "Deux enfants",
   });
 });
 
@@ -110,7 +116,7 @@ test("modifier la fiche met à jour le bandeau sans toucher aux notes", async ()
 
   // Notes typed but not saved yet must survive an identity save, and vice versa.
   const notes = within(screen.getByRole("form", { name: "Notes patient" }));
-  await user.type(notes.getByLabelText("Médicaux"), "Asthme");
+  await user.type(notes.getByLabelText("Contexte bio-psycho-social"), "Asthme");
   await user.click(
     notes.getByRole("button", { name: "Enregistrer les notes" }),
   );
@@ -128,7 +134,7 @@ test("modifier la fiche met à jour le bandeau sans toucher aux notes", async ()
   expect(screen.getByText("06 00 00 00 00")).toBeInTheDocument();
   expect(state.patients[0]).toMatchObject({
     phone: "06 00 00 00 00",
-    medical_history: "Asthme",
+    bps_context: "Asthme",
   });
 });
 

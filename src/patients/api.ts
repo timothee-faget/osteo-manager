@@ -24,16 +24,9 @@ export type PatientInput = {
   profession: string;
   sport: string;
   general_practitioner: string;
-  medical_history: string;
-  surgical_history: string;
-  trauma_history: string;
-  current_treatment: string;
+  /** History and review of systems, one text under predefined headings. */
+  clinical_history: string;
   bps_context: string;
-  ent: string;
-  cardio_pulmonary: string;
-  digestive: string;
-  gynecological: string;
-  lifestyle: string;
   guardian_consent_date: string | null;
   guardians: Guardian[];
 };
@@ -67,16 +60,8 @@ export const EMPTY_PATIENT: PatientInput = {
   profession: "",
   sport: "",
   general_practitioner: "",
-  medical_history: "",
-  surgical_history: "",
-  trauma_history: "",
-  current_treatment: "",
+  clinical_history: "",
   bps_context: "",
-  ent: "",
-  cardio_pulmonary: "",
-  digestive: "",
-  gynecological: "",
-  lifestyle: "",
   guardian_consent_date: null,
   guardians: [],
 };
