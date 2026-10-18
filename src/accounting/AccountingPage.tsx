@@ -71,7 +71,16 @@ export function AccountingPage() {
           avec la notice de la 2035 de l'année avant de les reporter.
         </p>
         {summary.sections.map((section) => (
-          <table key={section.title} aria-label={section.title}>
+          <table
+            key={section.title}
+            className="summary"
+            aria-label={section.title}
+          >
+            <colgroup>
+              <col className="col-line" />
+              <col />
+              <col className="col-amount" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Ligne</th>
@@ -103,7 +112,15 @@ export function AccountingPage() {
         {journal.entries.length === 0 ? (
           <p>Aucune écriture en {year}.</p>
         ) : (
-          <table aria-label="Livre-journal">
+          <table className="journal" aria-label="Livre-journal">
+            <colgroup>
+              <col className="col-date" />
+              <col />
+              <col className="col-category" />
+              <col className="col-method" />
+              <col className="col-amount" />
+              <col className="col-amount" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Date</th>
