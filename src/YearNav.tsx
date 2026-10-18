@@ -4,10 +4,12 @@ import { Icon } from "./icons";
 /** Year switcher above a yearly list; `children` (its total) sits on the right. */
 export function YearNav({
   year,
+  title = String(year),
   onChange,
   children,
 }: {
   year: number;
+  title?: string;
   onChange: (year: number) => void;
   children?: ReactNode;
 }) {
@@ -20,7 +22,7 @@ export function YearNav({
       >
         <Icon name="chevron" />
       </button>
-      <h3>{year}</h3>
+      <h3>{title}</h3>
       <button
         type="button"
         aria-label="Année suivante"

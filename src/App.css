@@ -1039,6 +1039,15 @@ td > button + button {
   margin-left: auto;
 }
 
+/* Accounting: the part driven by the year switcher, apart from the key figures. */
+.fiscal-year {
+  margin-top: var(--space-6);
+}
+
+.fiscal-year h4 {
+  margin-top: var(--space-5);
+}
+
 /* --- Home --- */
 
 .kpis {
