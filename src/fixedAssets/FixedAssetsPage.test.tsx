@@ -38,9 +38,8 @@ async function setup(
   const state = fakeBackend("unlocked");
   prepare?.(state);
   render(<App />);
-  await user.click(
-    await screen.findByRole("button", { name: "Immobilisations" }),
-  );
+  await user.click(await screen.findByRole("button", { name: "Dépenses" }));
+  await user.click(await screen.findByRole("tab", { name: "Immobilisations" }));
   await screen.findByRole("heading", { name: "Immobilisations" });
   return { user, state };
 }
