@@ -52,6 +52,7 @@ Calquées sur ses fiches Word actuelles (voir [legacy-data.md](legacy-data.md)) 
 - Tarif pré-rempli selon le lieu (standard ou domicile), modifiable.
 - **Enregistrement automatique** pendant la saisie (pas de bouton « Enregistrer ») ; une nouvelle séance est créée dès la première modification.
 - **Valider une séance génère automatiquement la facture** (sans l'envoyer).
+- **Séance à titre gracieux** : case à cocher ; pas de tarif ni de facture, jamais « à facturer ». Comptée dans le nombre de séances, mais pas dans le CA ni le panier moyen.
 - **Historique des séances** : toutes les séances, filtrables par période, statut, lieu et patient ; l'accueil montre les 5 dernières. Les listes affichent la date sans l'heure.
 
 ### 3.4 Facturation

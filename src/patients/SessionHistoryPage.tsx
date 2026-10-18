@@ -12,7 +12,7 @@ type Filters = {
   /** `YYYY-MM-DD`, inclusive; empty = no bound. */
   from: string;
   to: string;
-  billing: "" | "unbilled" | "billed";
+  billing: "" | "unbilled" | "billed" | "free";
   location: string;
   patient: string;
 };
@@ -32,6 +32,9 @@ const fold = (s: string) =>
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
+const billingOf = (s: RecentSession): Filters["billing"] =>
+  s.status === "free" || s.status === "unbilled" ? s.status : "billed";
+
 function filterSessions(list: RecentSession[], f: Filters) {
   const patient = fold(f.patient.trim());
   return list.filter((s) => {
@@ -39,8 +42,7 @@ function filterSessions(list: RecentSession[], f: Filters) {
     return (
       (!f.from || day >= f.from) &&
       (!f.to || day <= f.to) &&
-      (!f.billing ||
-        (s.status === "unbilled") === (f.billing === "unbilled")) &&
+      (!f.billing || billingOf(s) === f.billing) &&
       (!f.location || s.location_name === f.location) &&
       (!patient || fold(s.patient_name).includes(patient))
     );
@@ -105,6 +107,7 @@ export function SessionHistoryPage({
               <option value="">Tous</option>
               <option value="unbilled">Non facturées</option>
               <option value="billed">Facturées</option>
+              <option value="free">Gracieuses</option>
             </select>
           </label>
           {locations.length > 1 && (

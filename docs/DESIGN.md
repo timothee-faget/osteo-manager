@@ -103,13 +103,13 @@ Quatre variantes, pas une de plus :
 
 Toujours `.status` + une classe de statut, en pastille `--surface` avec texte coloré :
 
-| Classe                                     | Couleur         | Exemples                          |
-| ------------------------------------------ | --------------- | --------------------------------- |
-| `status-paid`                              | `--success`     | Payée                             |
-| `status-partially_paid`, `status-unbilled` | `--warning`     | Partiellement payée, Non facturée |
-| `status-unpaid`                            | `--danger`      | Impayée                           |
-| `status-invoiced`, `status-unsent`         | `--accent-dark` | Facturée, Non envoyée             |
-| `status-sent`, `status-cancelled`          | `--ink-soft`    | Envoyée, Annulée                  |
+| Classe                                           | Couleur         | Exemples                          |
+| ------------------------------------------------ | --------------- | --------------------------------- |
+| `status-paid`                                    | `--success`     | Payée                             |
+| `status-partially_paid`, `status-unbilled`       | `--warning`     | Partiellement payée, Non facturée |
+| `status-unpaid`                                  | `--danger`      | Impayée                           |
+| `status-invoiced`, `status-unsent`               | `--accent-dark` | Facturée, Non envoyée             |
+| `status-sent`, `status-cancelled`, `status-free` | `--ink-soft`    | Envoyée, Annulée, Gracieuse       |
 
 ## 10. Thème clair et sombre
 

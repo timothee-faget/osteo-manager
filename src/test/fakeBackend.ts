@@ -204,7 +204,9 @@ export function fakeBackend(initial: LockStatus) {
           reason: s.reason,
           fee_cents: s.fee_cents,
           status: !i
-            ? "unbilled"
+            ? s.free_of_charge
+              ? "free"
+              : "unbilled"
             : paid !== "unpaid"
               ? paid!
               : i.sent_at
@@ -430,6 +432,7 @@ export function fakeBackend(initial: LockStatus) {
       case "create_session": {
         const x: Session = {
           ...a.session,
+          fee_cents: a.session.free_of_charge ? 0 : a.session.fee_cents,
           id: state.sessions.length + 1,
           validated_at: null,
           invoice_id: null,
@@ -444,6 +447,7 @@ export function fakeBackend(initial: LockStatus) {
       case "update_session": {
         const x = state.sessions.find((s) => s.id === a.id)!;
         Object.assign(x, a.session);
+        if (x.free_of_charge) x.fee_cents = 0;
         return x;
       }
       case "delete_session":
@@ -453,6 +457,7 @@ export function fakeBackend(initial: LockStatus) {
         if (!state.practitioner.last_name)
           throw { code: "invalid_practitioner_incomplete" };
         const x = state.sessions.find((s) => s.id === a.id)!;
+        if (x.free_of_charge) throw { code: "invalid_session_free" };
         state.invoiceSeq += 1;
         x.validated_at = "2026-10-16T10:05:00";
         x.invoice_id = state.invoiceSeq;
@@ -753,7 +758,11 @@ export function fakeBackend(initial: LockStatus) {
             unpaid_cents: 0,
             cheques_to_deposit: 0,
             cheques_to_deposit_cents: 0,
-            ...unbilledOf(state.sessions.filter((s) => !s.validated_at)),
+            ...unbilledOf(
+              state.sessions.filter(
+                (s) => !s.validated_at && !s.free_of_charge,
+              ),
+            ),
             ...unsentOf(
               state.invoices.filter((i) => !i.sent_at && !i.credit_note),
             ),

@@ -96,10 +96,13 @@ export function SessionsSection({
                 </button>
                 {s.reason && <span className="session-reason">{s.reason}</span>}
                 <span className="session-billing">
-                  {formatEuros(s.fee_cents)} ·{" "}
-                  {s.invoice_number
-                    ? `${s.invoice_number} · ${PAYMENT_STATUSES[s.payment_status ?? "unpaid"]}`
-                    : "Non facturée"}
+                  {s.free_of_charge && !s.invoice_number
+                    ? "Gracieuse"
+                    : `${formatEuros(s.fee_cents)} · ${
+                        s.invoice_number
+                          ? `${s.invoice_number} · ${PAYMENT_STATUSES[s.payment_status ?? "unpaid"]}`
+                          : "Non facturée"
+                      }`}
                 </span>
               </header>
               {s.notes && <p className="session-notes">{s.notes}</p>}

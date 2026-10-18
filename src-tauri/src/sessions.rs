@@ -26,7 +26,10 @@ pub struct SessionInput {
     pub reason: String,
     /// Free-text clinical notes.
     pub notes: String,
+    /// Always 0 for a session given free of charge.
     pub fee_cents: i64,
+    /// Given free of charge: never invoiced.
+    pub free_of_charge: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -50,7 +53,10 @@ fn now() -> String {
 const COLUMNS: &str = "s.id, s.patient_id, s.location_id, s.starts_at, s.reason, s.notes,
     s.fee_cents, s.validated_at, i.id, i.number,
     s.created_at, s.updated_at, i.amount_cents,
-    (SELECT COALESCE(SUM(p.amount_cents), 0) FROM payment p WHERE p.invoice_id = i.id)";
+    (SELECT COALESCE(SUM(p.amount_cents), 0) FROM payment p WHERE p.invoice_id = i.id),
+    s.free_of_charge";
+/// Index of the first column after `COLUMNS`.
+const AFTER_COLUMNS: usize = 15;
 /// Joins the session's current (non-cancelled) invoice, if any.
 const FROM: &str = "session s LEFT JOIN invoice i ON i.session_id = s.id
     AND NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)";
@@ -65,6 +71,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Session> {
             reason: r.get(4)?,
             notes: r.get(5)?,
             fee_cents: r.get(6)?,
+            free_of_charge: r.get(14)?,
         },
         validated_at: r.get(7)?,
         invoice_id: r.get(8)?,
@@ -119,13 +126,14 @@ fn list_name(last_name: &str, first_name: &str) -> String {
 }
 
 /// Draft sessions, oldest first, with their total fees. A session whose invoice was
-/// cancelled by a credit note is a draft again, so it shows up here too.
+/// cancelled by a credit note is a draft again, so it shows up here too. Sessions given
+/// free of charge have nothing to bill.
 pub fn unbilled(conn: &Connection) -> Result<Unbilled> {
     let mut stmt = conn.prepare(
         "SELECT s.id, s.patient_id, p.last_name, p.first_name, s.starts_at, s.reason,
             s.fee_cents
          FROM session s JOIN patient p ON p.id = s.patient_id
-         WHERE s.validated_at IS NULL
+         WHERE s.validated_at IS NULL AND NOT s.free_of_charge
          ORDER BY s.starts_at, s.id",
     )?;
     let sessions: Vec<UnbilledSession> = stmt
@@ -151,6 +159,7 @@ pub fn unbilled(conn: &Connection) -> Result<Unbilled> {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
+    Free,
     Unbilled,
     Invoiced,
     Sent,
@@ -187,8 +196,9 @@ pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
     ))?;
     let rows = stmt.query_map([limit], |r| {
         let session = from_row(r)?;
-        let sent: bool = r.get(16)?;
+        let sent: bool = r.get(AFTER_COLUMNS + 2)?;
         let status = match session.payment_status {
+            None if session.data.free_of_charge => SessionStatus::Free,
             None => SessionStatus::Unbilled,
             Some(PaymentStatus::Paid) => SessionStatus::Paid,
             Some(PaymentStatus::PartiallyPaid) => SessionStatus::PartiallyPaid,
@@ -198,8 +208,11 @@ pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
         Ok(RecentSession {
             session_id: session.id,
             patient_id: session.data.patient_id,
-            patient_name: list_name(&r.get::<_, String>(14)?, &r.get::<_, String>(15)?),
-            location_name: r.get(17)?,
+            patient_name: list_name(
+                &r.get::<_, String>(AFTER_COLUMNS)?,
+                &r.get::<_, String>(AFTER_COLUMNS + 1)?,
+            ),
+            location_name: r.get(AFTER_COLUMNS + 3)?,
             starts_at: session.data.starts_at,
             reason: session.data.reason,
             fee_cents: session.data.fee_cents,
@@ -231,6 +244,9 @@ fn check(
     if NaiveDateTime::parse_from_str(&s.starts_at, DATETIME_FORMAT).is_err() {
         return Err(SessionError::Invalid("starts_at"));
     }
+    if s.free_of_charge {
+        s.fee_cents = 0;
+    }
     if s.fee_cents < 0 {
         return Err(SessionError::Invalid("fee"));
     }
@@ -260,9 +276,19 @@ fn check(
     }
     if let Some(c) = current.filter(|c| c.validated_at.is_some()) {
         let d = &c.data;
-        if (s.patient_id, s.location_id, &s.starts_at, s.fee_cents)
-            != (d.patient_id, d.location_id, &d.starts_at, d.fee_cents)
-        {
+        if (
+            s.patient_id,
+            s.location_id,
+            &s.starts_at,
+            s.fee_cents,
+            s.free_of_charge,
+        ) != (
+            d.patient_id,
+            d.location_id,
+            &d.starts_at,
+            d.fee_cents,
+            d.free_of_charge,
+        ) {
             return Err(SessionError::Invalid("session_invoiced"));
         }
     }
@@ -274,8 +300,8 @@ pub fn create(conn: &Connection, input: &SessionInput) -> Result<Session> {
     let ts = now();
     conn.execute(
         "INSERT INTO session (patient_id, location_id, starts_at, reason, notes, fee_cents,
-            created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            free_of_charge, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
         params![
             s.patient_id,
             s.location_id,
@@ -283,6 +309,7 @@ pub fn create(conn: &Connection, input: &SessionInput) -> Result<Session> {
             s.reason,
             s.notes,
             s.fee_cents,
+            s.free_of_charge,
             ts
         ],
     )?;
@@ -294,8 +321,8 @@ pub fn update(conn: &Connection, id: i64, input: &SessionInput) -> Result<Sessio
     let s = check(conn, input, Some(&current))?;
     conn.execute(
         "UPDATE session SET patient_id = ?1, location_id = ?2, starts_at = ?3, reason = ?4,
-            notes = ?5, fee_cents = ?6, updated_at = ?7
-         WHERE id = ?8",
+            notes = ?5, fee_cents = ?6, free_of_charge = ?7, updated_at = ?8
+         WHERE id = ?9",
         params![
             s.patient_id,
             s.location_id,
@@ -303,6 +330,7 @@ pub fn update(conn: &Connection, id: i64, input: &SessionInput) -> Result<Sessio
             s.reason,
             s.notes,
             s.fee_cents,
+            s.free_of_charge,
             now(),
             id
         ],
@@ -329,8 +357,12 @@ pub fn delete(conn: &Connection, id: i64) -> Result<()> {
 /// Validates the session and issues its invoice, atomically.
 pub fn validate(conn: &mut Connection, id: i64, today: NaiveDate) -> Result<(Session, Invoice)> {
     let tx = conn.transaction()?;
-    if get(&tx, id)?.validated_at.is_some() {
+    let session = get(&tx, id)?;
+    if session.validated_at.is_some() {
         return Err(SessionError::Invalid("session_invoiced"));
+    }
+    if session.data.free_of_charge {
+        return Err(SessionError::Invalid("session_free"));
     }
     // Marked first: once the invoice exists, the trigger locks the session's billing fields.
     tx.execute(
@@ -803,6 +835,39 @@ mod tests {
             invalid_field(invoices::invoice_pdf(&f.conn, 999)),
             "invoice"
         );
+    }
+
+    #[test]
+    fn a_free_session_is_never_billed() {
+        let mut f = fixture();
+        let free = f.free_session("2026-10-16T09:00");
+        // No fee to collect, whatever was typed.
+        assert!(free.data.free_of_charge);
+        assert_eq!(free.data.fee_cents, 0);
+        assert!(unbilled(&f.conn).unwrap().sessions.is_empty());
+        assert_eq!(recent(&f.conn, 10).unwrap()[0].status, SessionStatus::Free);
+        assert!(matches!(
+            f.validate(free.id, "2026-10-16"),
+            Err(SessionError::Invalid("session_free"))
+        ));
+
+        // Unticked, it is a draft to bill like any other.
+        let paid = update(&f.conn, free.id, &f.input("2026-10-16T09:00")).unwrap();
+        assert!(!paid.data.free_of_charge);
+        assert_eq!(paid.data.fee_cents, 6000);
+        assert_eq!(unbilled(&f.conn).unwrap().sessions.len(), 1);
+    }
+
+    #[test]
+    fn an_invoiced_session_cannot_become_free() {
+        let mut f = fixture();
+        let invoice = f.invoice("2026-10-16");
+        let mut input = f.input("2026-10-16T09:00");
+        input.free_of_charge = true;
+        assert!(matches!(
+            update(&f.conn, invoice.session_id, &input),
+            Err(SessionError::Invalid("session_invoiced"))
+        ));
     }
 
     #[test]

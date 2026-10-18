@@ -92,7 +92,17 @@ impl Fixture {
             reason: "Lombalgie".into(),
             notes: "Ttt iliaque D".into(),
             fee_cents: 6000,
+            free_of_charge: false,
         }
+    }
+
+    /// A session given free of charge.
+    pub fn free_session(&self, starts_at: &str) -> Session {
+        let input = SessionInput {
+            free_of_charge: true,
+            ..self.input(starts_at)
+        };
+        sessions::create(&self.conn, &input).unwrap()
     }
 
     pub fn session(&self, starts_at: &str) -> Session {
