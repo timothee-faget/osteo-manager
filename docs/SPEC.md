@@ -50,6 +50,7 @@ Calquées sur ses fiches Word actuelles (voir [legacy-data.md](legacy-data.md)) 
 
 - Date et heure, lieu, motif et une note libre unique.
 - Tarif pré-rempli selon le lieu (standard ou domicile), modifiable.
+- **Enregistrement automatique** pendant la saisie (pas de bouton « Enregistrer ») ; une nouvelle séance est créée dès la première modification.
 - **Valider une séance génère automatiquement la facture** (sans l'envoyer).
 - **Historique des séances** : toutes les séances, filtrables par période, statut, lieu et patient ; l'accueil montre les 5 dernières. Les listes affichent la date sans l'heure.
 
