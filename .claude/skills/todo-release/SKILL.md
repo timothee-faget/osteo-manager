@@ -19,7 +19,8 @@ Les règles de `CLAUDE.md` restent prioritaires (données de santé, factures im
 Changer le statut d'une issue sur le board :
 
 ```sh
-id=$(gh project item-list 1 --owner timothee-faget --format json --limit 300 --jq '.items[] | select(.content.number==<n>) | .id')
+# item-add is idempotent and returns the item id (item-list lags behind a fresh issue)
+id=$(gh project item-add 1 --owner timothee-faget --url https://github.com/timothee-faget/osteo-manager/issues/<n> --format json --jq .id)
 gh project item-edit --project-id PVT_kwHOBlWjns4BnY6J --id "$id" --field-id PVTSSF_lAHOBlWjns4BnY6Jzhl9xGk --single-select-option-id <option>
 ```
 
@@ -55,7 +56,7 @@ Attendre le « go ». Ajuster si l'utilisateur corrige.
 ## 4. Créer les issues
 
 - `gh issue create --label <label> --title ... --body ...` : contexte puis critères d'acceptation, en anglais.
-- `gh project item-add 1 --owner timothee-faget --url <url>`, statut Todo.
+- Ajouter au board et passer en Todo avec la commande des Repères (`item-add` ajoute l'issue).
 - Dans la note, suffixer chaque ligne couverte de ` (#n)`. Ne rien réécrire d'autre.
 
 ## 5. Traiter chaque issue
