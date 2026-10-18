@@ -40,7 +40,7 @@ export function SessionsSection({
         ? "Séance supprimée."
         : justInvoiced
           ? `Facture ${saved.invoice_number} émise.`
-          : "Séance enregistrée.",
+          : null,
     );
     await refresh();
   }
@@ -69,10 +69,11 @@ export function SessionsSection({
           key={editing === "new" ? "new" : editing.id}
           patientId={patientId}
           session={editing === "new" ? null : editing}
+          onSaved={() => void refresh()}
           onDone={(s) =>
             void done(s, editing !== "new" && editing.validated_at !== null)
           }
-          onCancel={() => setEditing(null)}
+          onClose={() => setEditing(null)}
           onPaymentChange={() => void refresh()}
         />
       )}

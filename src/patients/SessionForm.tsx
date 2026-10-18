@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Icon } from "../icons";
 import { errorMessage } from "../lock/api";
 import { centsToInput, parseEuros } from "../money";
 import { settingsApi, type PracticeLocation } from "../settings/api";
@@ -19,21 +20,28 @@ function toDraft(s: SessionInput): Draft {
   return { ...rest, fee: centsToInput(fee_cents) };
 }
 
+/** Delay after the last change before saving. */
+export const AUTOSAVE_MS = 1000;
+
 /**
- * Creates or edits a session. Once invoiced, only the reason and the notes can change.
- * `onDone` receives the saved session, or `null` after a deletion.
+ * Creates or edits a session, saved automatically shortly after each change: a new
+ * session is created on its first change. Once invoiced, only the reason and the notes
+ * can change. `onSaved` follows each save; `onDone` receives the invoiced session, or
+ * `null` after a deletion; `onClose` comes after the last pending save.
  */
 export function SessionForm({
   patientId,
   session,
+  onSaved,
   onDone,
-  onCancel,
+  onClose,
   onPaymentChange,
 }: {
   patientId: number;
   session: Session | null;
+  onSaved: (s: Session) => void;
   onDone: (s: Session | null) => void;
-  onCancel: () => void;
+  onClose: () => void;
   onPaymentChange: () => void;
 }) {
   const [locations, setLocations] = useState<PracticeLocation[] | null>(null);
@@ -41,6 +49,14 @@ export function SessionForm({
   const [confirm, setConfirm] = useState<"validate" | "delete" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"saving" | "saved" | null>(null);
+  /** The stored session: `session`, or the one created by the first save. */
+  const stored = useRef(session);
+  /** Draft changed by the user and not saved yet. */
+  const pending = useRef<Draft | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** Saves run one after the other, so a new session is created only once. */
+  const queue = useRef<Promise<void>>(Promise.resolve());
   const invoiced = session?.validated_at != null;
 
   useEffect(() => {
@@ -65,10 +81,46 @@ export function SessionForm({
     });
   }, [patientId, session]);
 
+  /** Saves the pending draft now, after the saves already running. */
+  function flush() {
+    clearTimeout(timer.current);
+    queue.current = queue.current.then(async () => {
+      const d = pending.current;
+      if (!d) return;
+      pending.current = null;
+      try {
+        const saved = await persist(d);
+        stored.current = saved;
+        setError(null);
+        setSaveState("saved");
+        onSaved(saved);
+      } catch (e) {
+        setError(errorMessage(e));
+        setSaveState(null);
+      }
+    });
+    return queue.current;
+  }
+
+  // A change still waiting when the form goes away is saved all the same.
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
+  useEffect(() => () => void flushRef.current(), []);
+
+  function change(next: Draft) {
+    setDraft(next);
+    pending.current = next;
+    setSaveState("saving");
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => void flush(), AUTOSAVE_MS);
+  }
+
   async function changeLocation(location_id: number) {
     if (!draft) return;
     const fee = await sessionsApi.defaultFee(location_id);
-    setDraft({ ...draft, location_id, fee: centsToInput(fee) });
+    change({ ...draft, location_id, fee: centsToInput(fee) });
   }
 
   async function run(action: () => Promise<void>) {
@@ -84,56 +136,76 @@ export function SessionForm({
     }
   }
 
-  /** Saves the draft; returns the stored session. */
-  async function persist(): Promise<Session> {
-    if (!draft) throw new Error("no draft");
-    const { fee, ...rest } = draft;
+  /** Saves `d`; returns the stored session. */
+  async function persist(d: Draft): Promise<Session> {
+    const { fee, ...rest } = d;
     const fee_cents = parseEuros(fee);
     if (fee_cents === null) throw { code: "invalid_fee_format" };
     const input = { ...rest, fee_cents };
-    return session
-      ? sessionsApi.update(session.id, input)
+    return stored.current
+      ? sessionsApi.update(stored.current.id, input)
       : sessionsApi.create(input);
-  }
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    void run(async () => onDone(await persist()));
   }
 
   const validate = () =>
     run(async () => {
-      const saved = await persist();
+      if (!draft) return;
+      await flush();
+      // Never saved yet: the defaults are invoiced as they are.
+      const saved = stored.current ?? (await persist(draft));
       onDone(await sessionsApi.validate(saved.id));
     });
 
   const remove = () =>
     run(async () => {
-      if (session) await sessionsApi.delete(session.id);
+      clearTimeout(timer.current);
+      pending.current = null;
+      await queue.current;
+      if (stored.current) await sessionsApi.delete(stored.current.id);
       onDone(null);
     });
+
+  const close = async () => {
+    await flush();
+    onClose();
+  };
 
   if (!locations) return null;
   if (locations.length === 0) {
     return (
       <p role="alert">
         Ajoutez d'abord un lieu d'exercice dans Paramètres.{" "}
-        <button type="button" className="link" onClick={onCancel}>
+        <button type="button" className="link" onClick={onClose}>
           Retour
         </button>
       </p>
     );
   }
   if (!draft) return null;
-  const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
+  const set = (patch: Partial<Draft>) => change({ ...draft, ...patch });
 
   return (
     <div className="session-form">
-      <form onSubmit={submit}>
-        <h4>
-          {session ? "Séance" : "Nouvelle séance"}
-          {session?.invoice_number && ` — facture ${session.invoice_number}`}
-        </h4>
+      <form onSubmit={(e) => e.preventDefault()}>
+        <header className="session-form-head">
+          <h4>
+            {session ? "Séance" : "Nouvelle séance"}
+            {session?.invoice_number && ` — facture ${session.invoice_number}`}
+          </h4>
+          {saveState && (
+            <span className="save-state" role="status">
+              {saveState === "saving" ? "Enregistrement…" : "Enregistré"}
+            </span>
+          )}
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Fermer"
+            onClick={() => void close()}
+          >
+            <Icon name="close" />
+          </button>
+        </header>
         {invoiced && (
           <p>
             Séance facturée : seuls le motif et les notes restent modifiables.
@@ -217,24 +289,22 @@ export function SessionForm({
             </button>
           </div>
         ) : (
-          <div className="actions">
-            <button type="submit" disabled={busy}>
-              Enregistrer
-            </button>
-            {!invoiced && (
-              <button type="button" onClick={() => setConfirm("validate")}>
+          !invoiced && (
+            <div className="actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setConfirm("validate")}
+              >
                 Valider et facturer
               </button>
-            )}
-            {session && !invoiced && (
-              <button type="button" onClick={() => setConfirm("delete")}>
-                Supprimer
-              </button>
-            )}
-            <button type="button" onClick={onCancel}>
-              Fermer
-            </button>
-          </div>
+              {(session || saveState) && (
+                <button type="button" onClick={() => setConfirm("delete")}>
+                  Supprimer
+                </button>
+              )}
+            </div>
+          )
         )}
       </form>
       {invoiced && session?.invoice_id != null && (

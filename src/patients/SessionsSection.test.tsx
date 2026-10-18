@@ -98,7 +98,7 @@ test("sans lieu d'exercice, invite à en créer un", async () => {
   );
 });
 
-test("tarif pré-rempli selon le lieu, séance enregistrée en brouillon", async () => {
+test("tarif pré-rempli selon le lieu, séance enregistrée automatiquement", async () => {
   const { user, state, s } = await setup();
   await newSession(user, s, "Lombalgie");
   expect(s.getByLabelText("Tarif")).toHaveValue("60,00");
@@ -114,10 +114,19 @@ test("tarif pré-rempli selon le lieu, séance enregistrée en brouillon", async
   );
   await user.clear(s.getByLabelText("Date et heure"));
   await user.type(s.getByLabelText("Date et heure"), "2026-10-16T09:30");
-  await user.click(s.getByRole("button", { name: "Enregistrer" }));
+  expect(s.getByRole("status")).toHaveTextContent("Enregistrement…");
+  expect(
+    s.queryByRole("button", { name: "Enregistrer" }),
+  ).not.toBeInTheDocument();
 
-  expect(await s.findByRole("status")).toHaveTextContent("Séance enregistrée.");
-  const item = s.getByRole("button", { name: "16/10/2026" }).closest("li")!;
+  // Saved shortly after the last change, without closing the form.
+  expect(
+    await s.findByText("Enregistré", {}, { timeout: 3000 }),
+  ).toBeInTheDocument();
+  expect(state.sessions).toHaveLength(1);
+  const item = (await s.findByRole("button", { name: "16/10/2026" })).closest(
+    "li",
+  )!;
   expect(within(item).getByText("Lombalgie")).toBeInTheDocument();
   expect(within(item).getByText("60,00 € · Non facturée")).toBeInTheDocument();
   // The history shows the whole note.
@@ -166,9 +175,11 @@ test("valider émet la facture après confirmation et verrouille la facturation"
     s.queryByRole("button", { name: "Supprimer" }),
   ).not.toBeInTheDocument();
 
+  // The notes still save; closing saves what was typed last.
   await user.type(s.getByLabelText("Notes"), "Restriction L5");
-  await user.click(s.getByRole("button", { name: "Enregistrer" }));
-  expect(await s.findByRole("status")).toHaveTextContent("Séance enregistrée.");
+  await user.click(s.getByRole("button", { name: "Fermer" }));
+  expect(await s.findByText("Restriction L5")).toBeInTheDocument();
+  expect(state.sessions).toHaveLength(1);
   expect(state.sessions[0].notes).toBe("Restriction L5");
 });
 
@@ -195,8 +206,7 @@ test("tarif invalide", async () => {
   await newSession(user, s, "Lombalgie");
   await user.clear(s.getByLabelText("Tarif"));
   await user.type(s.getByLabelText("Tarif"), "soixante");
-  await user.click(s.getByRole("button", { name: "Enregistrer" }));
-  expect(await s.findByRole("alert")).toHaveTextContent(
+  expect(await s.findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent(
     "Tarif invalide : saisissez un montant",
   );
   expect(state.sessions).toHaveLength(0);
@@ -205,8 +215,8 @@ test("tarif invalide", async () => {
 test("suppression d'un brouillon avec confirmation", async () => {
   const { user, state, s } = await setup();
   await newSession(user, s, "Lombalgie");
-  await user.click(s.getByRole("button", { name: "Enregistrer" }));
-  await s.findByRole("status");
+  await user.click(s.getByRole("button", { name: "Fermer" }));
+  expect(state.sessions).toHaveLength(1);
 
   await user.click(
     s.getAllByRole("button", { name: /^\d{2}\/\d{2}\/\d{4}$/ })[0],
@@ -247,4 +257,12 @@ test("encaissement juste après la facturation", async () => {
     [4000, "cash"],
     [2000, "cheque"],
   ]);
+});
+
+test("quitter la fiche enregistre la saisie en cours", async () => {
+  const { user, state, s } = await setup();
+  await newSession(user, s, "Lombalgie");
+  await user.click(screen.getByRole("button", { name: "← Patients" }));
+  await vi.waitFor(() => expect(state.sessions).toHaveLength(1));
+  expect(state.sessions[0].reason).toBe("Lombalgie");
 });

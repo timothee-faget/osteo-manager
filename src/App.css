@@ -846,6 +846,35 @@ form.confirm > button {
   margin: var(--space-4) 0;
 }
 
+.session-form-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session-form-head h4 {
+  flex: 1;
+}
+
+.save-state {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+button.icon-button {
+  width: var(--control-h);
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+button.icon-button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--surface-2);
+}
+
 /* Long forms keep a readable measure instead of spanning the page. */
 .expense-form {
   max-width: 48rem;
