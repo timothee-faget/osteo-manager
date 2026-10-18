@@ -26,6 +26,8 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   );
   const [batch, setBatch] = useState(false);
   const [filters, setFilters] = useState(NO_FILTERS);
+  /** Invoices left out of the export; every invoice shown is in by default. */
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
 
   const refresh = () => invoicesApi.list().then(setInvoices);
 
@@ -36,6 +38,12 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   if (!invoices) return null;
   const current = invoices.find((i) => i.id === selected);
   const shown = filterInvoices(invoices, filters);
+  const toggle = (id: number) => {
+    const next = new Set(excluded);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setExcluded(next);
+  };
   return (
     <section>
       <header>
@@ -71,8 +79,12 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
           <Filters
             invoices={invoices}
             filters={filters}
-            onChange={setFilters}
+            onChange={(f) => {
+              setFilters(f);
+              setExcluded(new Set());
+            }}
             shown={shown}
+            ticked={shown.filter((i) => !excluded.has(i.id))}
           />
           {shown.length === 0 ? (
             <p>Aucune facture ne correspond aux filtres.</p>
@@ -80,6 +92,20 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
             <table>
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      aria-label="Tout sélectionner"
+                      checked={excluded.size === 0}
+                      onChange={() =>
+                        setExcluded(
+                          excluded.size === 0
+                            ? new Set(shown.map((i) => i.id))
+                            : new Set(),
+                        )
+                      }
+                    />
+                  </th>
                   <th>N°</th>
                   <th>Date</th>
                   <th>Patient</th>
@@ -94,6 +120,14 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
                     key={i.id}
                     className={i.credit_note ? "archived" : undefined}
                   >
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Facture ${i.number}`}
+                        checked={!excluded.has(i.id)}
+                        onChange={() => toggle(i.id)}
+                      />
+                    </td>
                     <td>
                       <button
                         type="button"
@@ -142,17 +176,19 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   );
 }
 
-/** Filters of the list; the export takes exactly the invoices shown. */
+/** Filters of the list; the export takes the ticked invoices among those shown. */
 function Filters({
   invoices,
   filters,
   onChange,
   shown,
+  ticked,
 }: {
   invoices: InvoiceView[];
   filters: InvoiceFilters;
   onChange: (f: InvoiceFilters) => void;
   shown: InvoiceView[];
+  ticked: InvoiceView[];
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -166,7 +202,7 @@ function Filters({
     setBusy(true);
     setMessage(null);
     try {
-      const done = await invoicesApi.exportPdfs(shown.map((i) => i.id));
+      const done = await invoicesApi.exportPdfs(ticked.map((i) => i.id));
       if (done) {
         setMessage(
           `${done.count} fichier${done.count > 1 ? "s" : ""} PDF exporté${done.count > 1 ? "s" : ""} dans ${done.folder}`,
@@ -255,10 +291,10 @@ function Filters({
         </button>
         <button
           type="button"
-          disabled={busy || shown.length === 0}
+          disabled={busy || ticked.length === 0}
           onClick={() => void exportPdfs()}
         >
-          Exporter en PDF ({shown.length})
+          Exporter en PDF ({ticked.length})
         </button>
       </div>
       {message && <p role="status">{message}</p>}
