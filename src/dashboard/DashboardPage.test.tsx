@@ -200,7 +200,7 @@ test("les séances non facturées se déplient et se valident sur place", async 
     screen.getByRole("table", { name: "Séances non facturées" }),
   );
   expect(list.getAllByRole("row")).toHaveLength(3);
-  const first = list.getByText("14/10/2026 à 09:00").parentElement!;
+  const first = list.getByText("14/10/2026").parentElement!;
   expect(within(first).getByText("DUPONT Anne")).toBeInTheDocument();
 
   await user.click(within(first).getByRole("button", { name: "Valider" }));
@@ -249,7 +249,7 @@ test("dernières séances avec leur statut", async () => {
   const rows = recent().getAllByRole("row").slice(1);
   expect(
     rows.map((r) => within(r).getAllByRole("cell")[0].textContent),
-  ).toEqual(["15/10 11:30", "14/10 09:00"]);
+  ).toEqual(["15/10/2026", "14/10/2026"]);
   expect(recent().getAllByText("Non facturée")).toHaveLength(2);
 
   await user.click(screen.getAllByRole("button", { name: "Valider" })[0]);

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { PAYMENT_STATUSES } from "../invoices/paymentsApi";
 import { formatEuros } from "../money";
 import { SessionForm } from "./SessionForm";
-import { formatDateTime, sessionsApi, type Session } from "./sessionsApi";
+import { formatSessionDate, sessionsApi, type Session } from "./sessionsApi";
 
 /** `null`: no form open; `"new"`: creating; otherwise the session being edited. */
 type Editing = null | "new" | Session;
@@ -91,7 +91,7 @@ export function SessionsSection({
                     setEditing(s);
                   }}
                 >
-                  {formatDateTime(s.starts_at)}
+                  {formatSessionDate(s.starts_at)}
                 </button>
                 {s.reason && <span className="session-reason">{s.reason}</span>}
                 <span className="session-billing">

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { RecentSession } from "../dashboard/api";
 import type { PaymentStatus } from "../invoices/paymentsApi";
 
 /** Billing progress of a session, most advanced step only. */
@@ -36,6 +37,8 @@ export type Session = SessionInput & {
 export const sessionsApi = {
   list: (patientId: number) =>
     invoke<Session[]>("list_sessions", { patientId }),
+  /** Every session, newest first, with its patient, location and status. */
+  listAll: () => invoke<RecentSession[]>("list_all_sessions"),
   defaultFee: (locationId: number) =>
     invoke<number>("default_session_fee", { locationId }),
   create: (session: SessionInput) =>
@@ -59,9 +62,8 @@ export function formatDateTime(local: string) {
   return `${d}/${m}/${y} à ${time}`;
 }
 
-/** "2026-10-16T09:30" → "16/10 09:30", for narrow tables. */
-export function formatShortDateTime(local: string) {
-  const [date, time] = local.split("T");
-  const [, m, d] = date.split("-");
-  return `${d}/${m} ${time}`;
+/** "2026-10-16T09:30" → "16/10/2026": lists show the day only. */
+export function formatSessionDate(local: string) {
+  const [y, m, d] = local.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
 }

@@ -163,18 +163,26 @@ pub struct RecentSession {
     pub session_id: i64,
     pub patient_id: i64,
     pub patient_name: String,
+    pub location_name: String,
     pub starts_at: String,
     pub reason: String,
     pub fee_cents: i64,
     pub status: SessionStatus,
 }
 
+/// Every session, newest first, with its billing status.
+pub fn all(conn: &Connection) -> Result<Vec<RecentSession>> {
+    // SQLite reads a negative LIMIT as no limit.
+    recent(conn, -1)
+}
+
 /// The latest `limit` sessions, newest first, with their billing status.
 pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS}, p.last_name, p.first_name,
-            EXISTS (SELECT 1 FROM invoice_sending x WHERE x.invoice_id = i.id)
+            EXISTS (SELECT 1 FROM invoice_sending x WHERE x.invoice_id = i.id), l.name
          FROM {FROM} JOIN patient p ON p.id = s.patient_id
+            JOIN practice_location l ON l.id = s.location_id
          ORDER BY s.starts_at DESC, s.id DESC LIMIT ?1"
     ))?;
     let rows = stmt.query_map([limit], |r| {
@@ -191,6 +199,7 @@ pub fn recent(conn: &Connection, limit: i64) -> Result<Vec<RecentSession>> {
             session_id: session.id,
             patient_id: session.data.patient_id,
             patient_name: list_name(&r.get::<_, String>(14)?, &r.get::<_, String>(15)?),
+            location_name: r.get(17)?,
             starts_at: session.data.starts_at,
             reason: session.data.reason,
             fee_cents: session.data.fee_cents,
@@ -342,6 +351,11 @@ fn today() -> NaiveDate {
 #[tauri::command]
 pub fn list_sessions(state: State, patient_id: i64) -> Result<Vec<Session>> {
     list_for_patient(state.lock().unwrap().conn()?, patient_id)
+}
+
+#[tauri::command]
+pub fn list_all_sessions(state: State) -> Result<Vec<RecentSession>> {
+    all(state.lock().unwrap().conn()?)
 }
 
 #[tauri::command]
@@ -837,5 +851,18 @@ mod tests {
         assert_eq!(list[0].starts_at, "2026-10-10T09:00");
 
         assert_eq!(recent(&f.conn, 2).unwrap().len(), 2);
+        assert_eq!(all(&f.conn).unwrap(), list);
+    }
+
+    #[test]
+    fn all_lists_every_session_with_its_location() {
+        let f = fixture();
+        for i in 0..12 {
+            f.session(&format!("2026-09-{:02}T09:00", i + 1));
+        }
+        let list = all(&f.conn).unwrap();
+        assert_eq!(list.len(), 12);
+        assert_eq!(list[0].starts_at, "2026-09-12T09:00");
+        assert_eq!(list[0].location_name, "Cabinet");
     }
 }

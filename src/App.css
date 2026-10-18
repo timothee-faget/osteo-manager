@@ -1267,7 +1267,8 @@ col.col-amount {
 
 /* --- Invoice filters --- */
 
-.invoice-filters {
+.invoice-filters,
+.session-filters {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

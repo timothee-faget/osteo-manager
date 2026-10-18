@@ -117,9 +117,7 @@ test("tarif pré-rempli selon le lieu, séance enregistrée en brouillon", async
   await user.click(s.getByRole("button", { name: "Enregistrer" }));
 
   expect(await s.findByRole("status")).toHaveTextContent("Séance enregistrée.");
-  const item = s
-    .getByRole("button", { name: "16/10/2026 à 09:30" })
-    .closest("li")!;
+  const item = s.getByRole("button", { name: "16/10/2026" }).closest("li")!;
   expect(within(item).getByText("Lombalgie")).toBeInTheDocument();
   expect(within(item).getByText("60,00 € · Non facturée")).toBeInTheDocument();
   // The history shows the whole note.
@@ -211,7 +209,7 @@ test("suppression d'un brouillon avec confirmation", async () => {
   await s.findByRole("status");
 
   await user.click(
-    s.getAllByRole("button", { name: /^\d{2}\/\d{2}\/\d{4} à/ })[0],
+    s.getAllByRole("button", { name: /^\d{2}\/\d{2}\/\d{4}$/ })[0],
   );
   await user.click(await s.findByRole("button", { name: "Supprimer" }));
   await user.click(s.getByRole("button", { name: "Confirmer la suppression" }));

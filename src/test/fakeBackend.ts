@@ -22,7 +22,7 @@ import type {
 import type { Annuity, AssetYear } from "../fixedAssets/api";
 import type { Cheque, Deposit } from "../collections/api";
 import type { Journal, Summary } from "../accounting/api";
-import type { Dashboard, Period } from "../dashboard/api";
+import type { Dashboard, Period, RecentSession } from "../dashboard/api";
 import type {
   Draft,
   Kind,
@@ -186,6 +186,32 @@ export function fakeBackend(initial: LockStatus) {
   const statusOf = (amount: number, paid: number) =>
     paid >= amount ? "paid" : paid > 0 ? "partially_paid" : "unpaid";
   /** Invoice with its payment fields recomputed. */
+  /** Every session, newest first, as listed on the dashboard and in the history. */
+  const sessionRows = (): RecentSession[] =>
+    [...state.sessions]
+      .sort((x, y) => y.starts_at.localeCompare(x.starts_at))
+      .map((s) => {
+        const p = state.patients.find((x) => x.id === s.patient_id);
+        const l = state.locations.find((x) => x.id === s.location_id);
+        const i = state.invoices.find((x) => x.id === s.invoice_id);
+        const paid = i && withPayments(i).payment_status;
+        return {
+          session_id: s.id,
+          patient_id: s.patient_id,
+          patient_name: p ? `${p.last_name.toUpperCase()} ${p.first_name}` : "",
+          location_name: l?.name ?? "",
+          starts_at: s.starts_at,
+          reason: s.reason,
+          fee_cents: s.fee_cents,
+          status: !i
+            ? "unbilled"
+            : paid !== "unpaid"
+              ? paid!
+              : i.sent_at
+                ? "sent"
+                : "invoiced",
+        };
+      });
   const withPayments = (i: InvoiceView): InvoiceView => {
     i.paid_cents = paidOf(i.id);
     i.payment_status = statusOf(i.amount_cents, i.paid_cents);
@@ -729,34 +755,12 @@ export function fakeBackend(initial: LockStatus) {
             ...unsentOf(
               state.invoices.filter((i) => !i.sent_at && !i.credit_note),
             ),
-            recent_sessions: [...state.sessions]
-              .sort((x, y) => y.starts_at.localeCompare(x.starts_at))
-              .slice(0, 10)
-              .map((s) => {
-                const p = state.patients.find((x) => x.id === s.patient_id);
-                const i = state.invoices.find((x) => x.id === s.invoice_id);
-                const paid = i && withPayments(i).payment_status;
-                return {
-                  session_id: s.id,
-                  patient_id: s.patient_id,
-                  patient_name: p
-                    ? `${p.last_name.toUpperCase()} ${p.first_name}`
-                    : "",
-                  starts_at: s.starts_at,
-                  reason: s.reason,
-                  fee_cents: s.fee_cents,
-                  status: !i
-                    ? "unbilled"
-                    : paid !== "unpaid"
-                      ? paid
-                      : i.sent_at
-                        ? "sent"
-                        : "invoiced",
-                };
-              }),
+            recent_sessions: sessionRows().slice(0, 5),
           }
         );
       }
+      case "list_all_sessions":
+        return sessionRows();
       case "get_journal":
         return (
           state.journal ?? {

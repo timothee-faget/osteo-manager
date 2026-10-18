@@ -91,6 +91,7 @@ pub fn run() {
             attachments::read_attachment,
             attachments::delete_attachment,
             sessions::list_sessions,
+            sessions::list_all_sessions,
             sessions::default_session_fee,
             sessions::create_session,
             sessions::update_session,

@@ -4,7 +4,7 @@ import { BatchSend } from "../mail/BatchSend";
 import { formatEuros } from "../money";
 import {
   formatDateTime,
-  formatShortDateTime,
+  formatSessionDate,
   SESSION_STATUSES,
   sessionsApi,
 } from "../patients/sessionsApi";
@@ -42,6 +42,7 @@ export function DashboardPage({
   onNewPatient,
   onOpenCollections,
   onOpenAccounting,
+  onOpenSessions,
 }: {
   onOpenPatient: (
     id: number,
@@ -50,6 +51,7 @@ export function DashboardPage({
   onNewPatient: (name: string) => void;
   onOpenCollections: () => void;
   onOpenAccounting: () => void;
+  onOpenSessions: () => void;
 }) {
   const [d, setD] = useState<Dashboard | null>(null);
   const [firstName, setFirstName] = useState("");
@@ -223,7 +225,7 @@ export function DashboardPage({
                           })
                         }
                       >
-                        {formatShortDateTime(s.starts_at)}
+                        {formatSessionDate(s.starts_at)}
                       </button>
                     </td>
                     <td className="patient">{s.patient_name}</td>
@@ -239,6 +241,9 @@ export function DashboardPage({
               </tbody>
             </table>
           )}
+          <button type="button" className="link" onClick={onOpenSessions}>
+            Toutes les séances →
+          </button>
         </section>
 
         <section className="card">
@@ -324,7 +329,7 @@ export function DashboardPage({
             <tbody>
               {d.unbilled_sessions.map((s) => (
                 <tr key={s.session_id}>
-                  <td>{formatDateTime(s.starts_at)}</td>
+                  <td>{formatSessionDate(s.starts_at)}</td>
                   <td className="patient">{s.patient_name}</td>
                   <td>{s.reason}</td>
                   <td className="num">{formatEuros(s.fee_cents)}</td>

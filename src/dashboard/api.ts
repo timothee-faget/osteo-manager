@@ -27,6 +27,7 @@ export type RecentSession = {
   session_id: number;
   patient_id: number;
   patient_name: string;
+  location_name: string;
   starts_at: string;
   reason: string;
   fee_cents: number;
