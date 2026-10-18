@@ -60,9 +60,9 @@ test("bilan résumé, à traiter et détail dans Comptabilité", async () => {
   ).toBeInTheDocument();
   const card = (title: string) =>
     within(screen.getByText(title).parentElement!);
-  await screen.findByText("CA encaissé en octobre 2026");
+  await screen.findByText("CA encaissé ce mois");
   expect(
-    card("CA encaissé en octobre 2026").getByText("+100 % vs 2025"),
+    card("CA encaissé ce mois").getByText("+100 % vs 2025"),
   ).toBeInTheDocument();
   expect(card("Séances ce mois").getByText("2")).toBeInTheDocument();
   expect(
@@ -249,7 +249,7 @@ test("dernières séances avec leur statut", async () => {
   const rows = recent().getAllByRole("row").slice(1);
   expect(
     rows.map((r) => within(r).getAllByRole("cell")[0].textContent),
-  ).toEqual(["15/10/2026 à 11:30", "14/10/2026 à 09:00"]);
+  ).toEqual(["15/10 11:30", "14/10 09:00"]);
   expect(recent().getAllByText("Non facturée")).toHaveLength(2);
 
   await user.click(screen.getAllByRole("button", { name: "Valider" })[0]);

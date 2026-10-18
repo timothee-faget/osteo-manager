@@ -58,3 +58,10 @@ export function formatDateTime(local: string) {
   const [y, m, d] = date.split("-");
   return `${d}/${m}/${y} à ${time}`;
 }
+
+/** "2026-10-16T09:30" → "16/10 09:30", for narrow tables. */
+export function formatShortDateTime(local: string) {
+  const [date, time] = local.split("T");
+  const [, m, d] = date.split("-");
+  return `${d}/${m} ${time}`;
+}
