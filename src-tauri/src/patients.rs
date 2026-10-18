@@ -1,5 +1,5 @@
-//! Patient records: identification, history and review of systems (free text, as in the
-//! Word files), plus legal guardians for minors. Records are never deleted.
+//! Patient records: identification, history and review of systems (one free text under
+//! predefined headings), plus legal guardians for minors. Records are never deleted.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -52,24 +52,30 @@ pub struct Guardian {
     pub email: String,
 }
 
+/// Headings a new record's history starts with; the practitioner writes after each one.
+pub const CLINICAL_HISTORY_TEMPLATE: &str = "Antécédents
+Médicaux :
+Chirurgicaux :
+Traumatiques :
+Traitement en cours :
+
+Revue des systèmes
+ORL :
+Cardio-pulmonaire :
+Digestif :
+Gynécologique :
+Hygiène de vie :";
+
 /// Free-text columns, in the order of `PatientInput::texts`.
-const TEXT_COLUMNS: [&str; 16] = [
+const TEXT_COLUMNS: [&str; 8] = [
     "phone",
     "email",
     "address",
     "profession",
     "sport",
     "general_practitioner",
-    "medical_history",
-    "surgical_history",
-    "trauma_history",
-    "current_treatment",
+    "clinical_history",
     "bps_context",
-    "ent",
-    "cardio_pulmonary",
-    "digestive",
-    "gynecological",
-    "lifestyle",
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -86,18 +92,9 @@ pub struct PatientInput {
     pub profession: String,
     pub sport: String,
     pub general_practitioner: String,
-    // History
-    pub medical_history: String,
-    pub surgical_history: String,
-    pub trauma_history: String,
-    pub current_treatment: String,
+    /// History and review of systems, under the headings of `CLINICAL_HISTORY_TEMPLATE`.
+    pub clinical_history: String,
     pub bps_context: String,
-    // Review of systems
-    pub ent: String,
-    pub cardio_pulmonary: String,
-    pub digestive: String,
-    pub gynecological: String,
-    pub lifestyle: String,
     // Minors
     /// When the guardians' consent to treatment was obtained.
     pub guardian_consent_date: Option<String>,
@@ -105,7 +102,7 @@ pub struct PatientInput {
 }
 
 impl PatientInput {
-    fn texts(&self) -> [&String; 16] {
+    fn texts(&self) -> [&String; 8] {
         [
             &self.phone,
             &self.email,
@@ -113,20 +110,12 @@ impl PatientInput {
             &self.profession,
             &self.sport,
             &self.general_practitioner,
-            &self.medical_history,
-            &self.surgical_history,
-            &self.trauma_history,
-            &self.current_treatment,
+            &self.clinical_history,
             &self.bps_context,
-            &self.ent,
-            &self.cardio_pulmonary,
-            &self.digestive,
-            &self.gynecological,
-            &self.lifestyle,
         ]
     }
 
-    fn texts_mut(&mut self) -> [&mut String; 16] {
+    fn texts_mut(&mut self) -> [&mut String; 8] {
         [
             &mut self.phone,
             &mut self.email,
@@ -134,16 +123,8 @@ impl PatientInput {
             &mut self.profession,
             &mut self.sport,
             &mut self.general_practitioner,
-            &mut self.medical_history,
-            &mut self.surgical_history,
-            &mut self.trauma_history,
-            &mut self.current_treatment,
+            &mut self.clinical_history,
             &mut self.bps_context,
-            &mut self.ent,
-            &mut self.cardio_pulmonary,
-            &mut self.digestive,
-            &mut self.gynecological,
-            &mut self.lifestyle,
         ]
     }
 }
@@ -282,8 +263,12 @@ const CORE_COLUMNS: [&str; 5] = [
     "guardian_consent_date",
 ];
 
+/// A record created without history starts with the headings of `CLINICAL_HISTORY_TEMPLATE`.
 pub fn create(conn: &mut Connection, input: &PatientInput, today: NaiveDate) -> Result<Patient> {
-    let p = check(input, today)?;
+    let mut p = check(input, today)?;
+    if p.clinical_history.is_empty() {
+        p.clinical_history = CLINICAL_HISTORY_TEMPLATE.into();
+    }
     let columns: Vec<&str> = TEXT_COLUMNS.iter().chain(&CORE_COLUMNS).copied().collect();
     let placeholders: Vec<String> = (1..=columns.len() + 2).map(|i| format!("?{i}")).collect();
     let mut values = core_values(&p);
@@ -582,7 +567,7 @@ mod tests {
             birth_date: Some("1980-05-12".into()),
             phone: "06 00 00 00 00".into(),
             email: "patiente@example.org".into(),
-            medical_history: "RAS".into(),
+            bps_context: "RAS".into(),
             ..Default::default()
         }
     }
@@ -598,14 +583,26 @@ mod tests {
     fn create_trims_and_reads_back() {
         let (_dir, mut c) = conn();
         let mut i = input(" Dupont ", "Anne");
-        i.lifestyle = "  Sommeil correct \n".into();
+        i.clinical_history = "  Médicaux : RAS \n".into();
         i.birth_date = Some(" ".into());
         let p = create(&mut c, &i, day(TODAY)).unwrap();
         assert_eq!(p.data.last_name, "Dupont");
-        assert_eq!(p.data.lifestyle, "Sommeil correct");
+        assert_eq!(p.data.clinical_history, "Médicaux : RAS");
         assert_eq!(p.data.birth_date, None);
         assert_eq!(p.data.civility, Some(Civility::Mme));
         assert_eq!(get(&c, p.id, day(TODAY)).unwrap(), p);
+    }
+
+    #[test]
+    fn a_new_record_starts_with_the_history_headings() {
+        let (_dir, mut c) = conn();
+        let p = create(&mut c, &input("Dupont", "Anne"), day(TODAY)).unwrap();
+        assert_eq!(p.data.clinical_history, CLINICAL_HISTORY_TEMPLATE);
+        // Emptied on purpose afterwards, it stays empty.
+        let mut i = p.data.clone();
+        i.clinical_history.clear();
+        let p = update(&mut c, p.id, &i, day(TODAY)).unwrap();
+        assert_eq!(p.data.clinical_history, "");
     }
 
     #[test]
@@ -691,9 +688,9 @@ mod tests {
         let today = day(TODAY);
         let p = create(&mut c, &input("Dupont", "Anne"), today).unwrap();
         let mut i = p.data.clone();
-        i.digestive = "Reflux".into();
+        i.clinical_history = "Digestif : Reflux".into();
         let updated = update(&mut c, p.id, &i, today).unwrap();
-        assert_eq!(updated.data.digestive, "Reflux");
+        assert_eq!(updated.data.clinical_history, "Digestif : Reflux");
         assert_eq!(updated.created_at, p.created_at);
         assert_eq!(invalid_field(update(&mut c, 999, &i, today)), "patient");
     }
@@ -770,12 +767,15 @@ mod tests {
         let (_dir, mut c) = conn();
         let today = day(TODAY);
         let mut i = input("Dupont", "Anne");
-        i.surgical_history = "Appendicectomie 1995".into();
+        i.clinical_history = "Chirurgicaux : Appendicectomie 1995".into();
         let p = create(&mut c, &i, today).unwrap();
         let json = export(&c, p.id, today).unwrap();
         assert_eq!(json["format"], "osteo-manager/patient-export/v1");
         assert_eq!(json["patient"]["last_name"], "Dupont");
-        assert_eq!(json["patient"]["surgical_history"], "Appendicectomie 1995");
+        assert_eq!(
+            json["patient"]["clinical_history"],
+            "Chirurgicaux : Appendicectomie 1995"
+        );
         assert_eq!(json["patient"]["guardians"], serde_json::json!([]));
     }
 

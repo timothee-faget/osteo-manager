@@ -38,8 +38,8 @@ Calquées sur ses fiches Word actuelles (voir [legacy-data.md](legacy-data.md)) 
 
 - **Identification** : civilité, nom, prénom, date de naissance, téléphone, e-mail (pour l'envoi des factures), adresse, profession, activité sportive, médecin traitant.
 - **Patient mineur** : représentant(s) légal(aux) et autorisation.
-- **Antécédents** (texte libre) : médicaux, chirurgicaux, traumatiques, traitement en cours, contexte bio-psycho-social.
-- **Revue des systèmes** (texte libre) : ORL, cardio-pulmonaire, digestif, gynécologique, hygiène de vie.
+- **Antécédents et revue des systèmes** : un seul texte libre, pré-rempli avec les titres des sous-catégories (antécédents médicaux, chirurgicaux, traumatiques, traitement en cours ; ORL, cardio-pulmonaire, digestif, gynécologique, hygiène de vie).
+- **Contexte bio-psycho-social** : texte libre à part.
 - Historique des séances (voir 3.3).
 - **Pièces jointes** (radios, ordonnances, comptes-rendus) stockées chiffrées.
 - **Vue consultation** : bandeau compact des infos civiles (modifiables via « Modifier la fiche ») ; à gauche les antécédents et la revue des systèmes, toujours éditables, puis les pièces jointes ; à droite, plus large, la séance en cours puis les séances passées avec leur note complète.

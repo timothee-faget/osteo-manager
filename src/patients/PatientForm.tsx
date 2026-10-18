@@ -12,7 +12,12 @@ type TextKey = {
   [K in keyof PatientInput]: PatientInput[K] extends string ? K : never;
 }[keyof PatientInput];
 
-type Field = { key: TextKey; label: string; multiline?: boolean };
+type Field = {
+  key: TextKey;
+  label: string;
+  multiline?: boolean;
+  rows?: number;
+};
 
 const IDENTIFICATION: Field[] = [
   { key: "last_name", label: "Nom" },
@@ -25,20 +30,14 @@ const IDENTIFICATION: Field[] = [
   { key: "general_practitioner", label: "Médecin traitant" },
 ];
 
-const HISTORY: Field[] = [
-  { key: "medical_history", label: "Médicaux", multiline: true },
-  { key: "surgical_history", label: "Chirurgicaux", multiline: true },
-  { key: "trauma_history", label: "Traumatiques", multiline: true },
-  { key: "current_treatment", label: "Traitement en cours", multiline: true },
+const CLINICAL: Field[] = [
+  {
+    key: "clinical_history",
+    label: "Antécédents et revue des systèmes",
+    multiline: true,
+    rows: 14,
+  },
   { key: "bps_context", label: "Contexte bio-psycho-social", multiline: true },
-];
-
-const SYSTEMS: Field[] = [
-  { key: "ent", label: "ORL", multiline: true },
-  { key: "cardio_pulmonary", label: "Cardio-pulmonaire", multiline: true },
-  { key: "digestive", label: "Digestif", multiline: true },
-  { key: "gynecological", label: "Gynécologique", multiline: true },
-  { key: "lifestyle", label: "Hygiène de vie", multiline: true },
 ];
 
 const EMPTY_GUARDIAN: Guardian = {
@@ -56,7 +55,7 @@ const IDENTITY_KEYS: (keyof PatientInput)[] = [
   "guardian_consent_date",
 ];
 
-const CLINICAL_KEYS = [...HISTORY, ...SYSTEMS].map((f) => f.key);
+const CLINICAL_KEYS = CLINICAL.map((f) => f.key);
 
 type Submit = (patch: Partial<PatientInput>) => Promise<Patient>;
 
@@ -75,12 +74,12 @@ function usePatientForm(
   const set = (patch: Partial<PatientInput>) => setForm({ ...form, ...patch });
 
   function fields(list: Field[]) {
-    return list.map(({ key, label, multiline }) => (
+    return list.map(({ key, label, multiline, rows = 2 }) => (
       <label key={key}>
         {label}
         {multiline ? (
           <textarea
-            rows={2}
+            rows={rows}
             value={form[key]}
             onChange={(e) => set({ [key]: e.target.value })}
           />
@@ -257,14 +256,7 @@ export function ClinicalNotesForm({
       onSubmit={(e) => void submit(e)}
     >
       <h3>Notes patient</h3>
-      <div className="note-group">
-        <h4>Antécédents</h4>
-        {fields(HISTORY)}
-      </div>
-      <div className="note-group">
-        <h4>Revue des systèmes</h4>
-        {fields(SYSTEMS)}
-      </div>
+      {fields(CLINICAL)}
       {feedback}
       <button type="submit" disabled={busy}>
         Enregistrer les notes

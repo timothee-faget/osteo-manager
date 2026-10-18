@@ -367,6 +367,8 @@ export function fakeBackend(initial: LockStatus) {
         if (!a.patient.last_name.trim()) throw { code: "invalid_last_name" };
         const p = withMinor({
           ...a.patient,
+          clinical_history:
+            a.patient.clinical_history || "Antécédents\nMédicaux :",
           last_name: a.patient.last_name.trim(),
           id: state.patients.length + 1,
           created_at: "2026-10-16T10:00:00",
