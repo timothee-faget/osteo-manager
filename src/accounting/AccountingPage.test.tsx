@@ -25,6 +25,11 @@ async function setup(prepare?: (s: ReturnType<typeof fakeBackend>) => void) {
   render(<App />);
   await user.click(await screen.findByRole("button", { name: "Comptabilité" }));
   await screen.findByRole("heading", { name: "Synthèse 2035" });
+  expect(
+    screen.getByRole("heading", {
+      name: `Exercice ${new Date().getFullYear()}`,
+    }),
+  ).toBeInTheDocument();
   return { user, state };
 }
 
