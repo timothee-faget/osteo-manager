@@ -123,6 +123,12 @@
   color-scheme: dark;
 }
 
+/* No elastic bounce: the sidebar must never move. */
+html,
+.sidebar {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
