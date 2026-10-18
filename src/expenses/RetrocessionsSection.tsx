@@ -32,7 +32,7 @@ export function RetrocessionsSection({ onPaid }: { onPaid: () => void }) {
     formatMonth(m.month) + (m.month === current ? " (en cours)" : "");
 
   return (
-    <section>
+    <section className="card table-card">
       <h3>Rétrocessions</h3>
       {toPay.length === 0 ? (
         <p>Aucune rétrocession à payer.</p>

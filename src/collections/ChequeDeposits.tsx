@@ -79,7 +79,7 @@ export function ChequeDeposits() {
       {data.pending.length === 0 ? (
         <p>Aucun chèque à remettre.</p>
       ) : (
-        <>
+        <div className="card table-card">
           <h3>Chèques à remettre</h3>
           <table>
             <thead>
@@ -159,7 +159,7 @@ export function ChequeDeposits() {
               Créer la remise
             </button>
           </div>
-        </>
+        </div>
       )}
       {message && (
         <p role={message.error ? "alert" : "status"}>{message.text}</p>
@@ -191,78 +191,81 @@ export function ChequeDeposits() {
           />
         </figure>
       )}
-      <h3>Remises effectuées</h3>
-      {data.deposits.length === 0 ? (
-        <p>Aucune remise.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>N°</th>
-              <th>Date de dépôt</th>
-              <th>Chèques</th>
-              <th className="num">Total</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {data.deposits.map((d) => (
-              <tr key={d.id}>
-                <td>{d.id}</td>
-                <td>{formatDate(d.deposited_on)}</td>
-                <td>{d.cheque_count}</td>
-                <td className="num">{formatEuros(d.total_cents)}</td>
-                <td className="actions">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        await showSlip(d);
-                        return null;
-                      })
-                    }
-                  >
-                    Bordereau
-                  </button>
-                  {confirmCancel === d.id ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(async () => {
-                            await depositsApi.cancel(d.id);
-                            setConfirmCancel(null);
-                            if (preview?.deposit.id === d.id) setPreview(null);
-                            setData(await load());
-                            return `Remise n° ${d.id} annulée : ses chèques sont de nouveau à remettre.`;
-                          })
-                        }
-                      >
-                        Confirmer l'annulation
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmCancel(null)}
-                      >
-                        Garder
-                      </button>
-                    </>
-                  ) : (
+      <div className="card table-card">
+        <h3>Remises effectuées</h3>
+        {data.deposits.length === 0 ? (
+          <p>Aucune remise.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>N°</th>
+                <th>Date de dépôt</th>
+                <th>Chèques</th>
+                <th className="num">Total</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {data.deposits.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.id}</td>
+                  <td>{formatDate(d.deposited_on)}</td>
+                  <td>{d.cheque_count}</td>
+                  <td className="num">{formatEuros(d.total_cents)}</td>
+                  <td className="actions">
                     <button
                       type="button"
-                      onClick={() => setConfirmCancel(d.id)}
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          await showSlip(d);
+                          return null;
+                        })
+                      }
                     >
-                      Annuler la remise
+                      Bordereau
                     </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+                    {confirmCancel === d.id ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              await depositsApi.cancel(d.id);
+                              setConfirmCancel(null);
+                              if (preview?.deposit.id === d.id)
+                                setPreview(null);
+                              setData(await load());
+                              return `Remise n° ${d.id} annulée : ses chèques sont de nouveau à remettre.`;
+                            })
+                          }
+                        >
+                          Confirmer l'annulation
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmCancel(null)}
+                        >
+                          Garder
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmCancel(d.id)}
+                      >
+                        Annuler la remise
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </section>
   );
 }

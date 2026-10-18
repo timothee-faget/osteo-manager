@@ -213,6 +213,99 @@ state.sessions.push(
       "Lombalgie après déménagement. Restriction L5 D, bassin.\nRevoir dans 3 semaines si persistance.",
   } as any,
 );
+state.expenses.push(
+  {
+    id: 1,
+    paid_on: "2026-10-05",
+    supplier: "SCI du Marché",
+    label: "Loyer octobre",
+    amount_cents: 65000,
+    method: "transfer",
+    category: "rent",
+    recurring_id: 1,
+    recurring_month: "2026-10",
+    receipt: null,
+  },
+  {
+    id: 2,
+    paid_on: "2026-10-12",
+    supplier: "Papeterie Centrale",
+    label: "Ramettes et classeurs",
+    amount_cents: 3890,
+    method: "card",
+    category: "office",
+    recurring_id: null,
+    recurring_month: null,
+    receipt: { file_name: "ticket.pdf", mime: "application/pdf", size: 4 },
+  },
+);
+state.recurring.push({
+  id: 1,
+  label: "Loyer",
+  supplier: "SCI du Marché",
+  amount_cents: 65000,
+  method: "transfer",
+  category: "rent",
+  day_of_month: 5,
+  start_month: "2026-01",
+  archived: false,
+});
+state.retrocessions.push(
+  {
+    location_id: 1,
+    location_name: "Cabinet",
+    month: "2026-10",
+    receipts_cents: 234000,
+    rate_bp: 3000,
+    due_cents: 70200,
+    paid: null,
+  },
+  {
+    location_id: 1,
+    location_name: "Cabinet",
+    month: "2026-09",
+    receipts_cents: 198000,
+    rate_bp: 3000,
+    due_cents: 59400,
+    paid: { expense_id: 9, paid_on: "2026-10-02", amount_cents: 59400 },
+  },
+);
+state.assets.push({
+  id: 1,
+  label: "Table de traitement",
+  acquired_on: "2025-03-10",
+  cost_cents: 180000,
+  duration_years: 5,
+  disposed_on: null,
+  disposal_price_cents: null,
+  notes: "",
+} as any);
+state.cheques.push(
+  {
+    payment_id: 1,
+    received_on: "2026-10-15",
+    amount_cents: 6000,
+    reference: "1234567",
+    drawer: "Paul Girard",
+    invoice_number: "2026-10-003",
+    deposit: null,
+  },
+  {
+    payment_id: 2,
+    received_on: "2026-10-16",
+    amount_cents: 7000,
+    reference: "7654321",
+    drawer: "Marc Olivier",
+    invoice_number: "2026-10-001",
+    deposit: null,
+  },
+);
+state.deposits.push({
+  id: 1,
+  deposited_on: "2026-10-01",
+  cheque_count: 4,
+  total_cents: 24000,
+});
 (window as any).state = state;
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 // ?click=Patients|FONTAINE Léa : clicks buttons by their text, one after the other.

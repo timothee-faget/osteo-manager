@@ -141,34 +141,36 @@ function PatientList({
             {query ? "Aucun patient trouvé." : "Aucun patient pour l'instant."}
           </p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Date de naissance</th>
-                <th>Téléphone</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patients.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => onOpen(p.id)}
-                    >
-                      {p.civility && `${CIVILITIES[p.civility]} `}
-                      {p.last_name.toUpperCase()} {p.first_name}
-                    </button>
-                    {p.is_minor && <span className="badge">Mineur</span>}
-                  </td>
-                  <td>{formatDate(p.birth_date)}</td>
-                  <td>{p.phone}</td>
+          <div className="card table-card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Date de naissance</th>
+                  <th>Téléphone</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {patients.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => onOpen(p.id)}
+                      >
+                        {p.civility && `${CIVILITIES[p.civility]} `}
+                        {p.last_name.toUpperCase()} {p.first_name}
+                      </button>
+                      {p.is_minor && <span className="badge">Mineur</span>}
+                    </td>
+                    <td>{formatDate(p.birth_date)}</td>
+                    <td>{p.phone}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ))}
     </section>
   );

@@ -96,39 +96,42 @@ export function FixedAssetsPage() {
       {register.assets.length === 0 ? (
         <p>Aucune immobilisation en {year}.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Désignation</th>
-              <th>Acquise le</th>
-              <th className="num">Coût</th>
-              <th>Durée</th>
-              <th className="num">Dotation {year}</th>
-              <th className="num">Valeur nette fin {year}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {register.assets.map((a) => (
-              <tr key={a.id}>
-                <td>
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => setEditing({ asset: a })}
-                  >
-                    {a.label}
-                  </button>
-                  {a.disposed_on && ` (cédée le ${formatDate(a.disposed_on)})`}
-                </td>
-                <td>{formatDate(a.acquired_on)}</td>
-                <td className="num">{formatEuros(a.cost_cents)}</td>
-                <td>{a.duration_years} ans</td>
-                <td className="num">{formatEuros(a.annuity_cents)}</td>
-                <td className="num">{formatEuros(a.net_cents)}</td>
+        <div className="card table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Désignation</th>
+                <th>Acquise le</th>
+                <th className="num">Coût</th>
+                <th>Durée</th>
+                <th className="num">Dotation {year}</th>
+                <th className="num">Valeur nette fin {year}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {register.assets.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => setEditing({ asset: a })}
+                    >
+                      {a.label}
+                    </button>
+                    {a.disposed_on &&
+                      ` (cédée le ${formatDate(a.disposed_on)})`}
+                  </td>
+                  <td>{formatDate(a.acquired_on)}</td>
+                  <td className="num">{formatEuros(a.cost_cents)}</td>
+                  <td>{a.duration_years} ans</td>
+                  <td className="num">{formatEuros(a.annuity_cents)}</td>
+                  <td className="num">{formatEuros(a.net_cents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
