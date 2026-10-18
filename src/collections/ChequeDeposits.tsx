@@ -76,11 +76,11 @@ export function ChequeDeposits() {
 
   return (
     <section>
-      <h3>Chèques à remettre</h3>
       {data.pending.length === 0 ? (
         <p>Aucun chèque à remettre.</p>
       ) : (
         <>
+          <h3>Chèques à remettre</h3>
           <table>
             <thead>
               <tr>
