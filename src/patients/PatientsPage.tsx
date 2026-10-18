@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../icons";
 import { errorMessage } from "../lock/api";
 import {
   ageOn,
@@ -124,15 +125,16 @@ function PatientList({
           Nouveau patient
         </button>
       </header>
-      <label>
-        Rechercher
+      <div className="search-field">
+        <Icon name="search" />
         <input
           type="search"
+          aria-label="Rechercher un patient"
           placeholder="Nom ou prénom"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-      </label>
+      </div>
       {patients &&
         (patients.length === 0 ? (
           <p>

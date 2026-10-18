@@ -139,7 +139,10 @@ test("recherche insensible aux accents", async () => {
   await createPatient(user, "Dupont", "Anne");
   await user.click(screen.getByRole("button", { name: "← Patients" }));
 
-  await user.type(await screen.findByLabelText("Rechercher"), "helene");
+  await user.type(
+    await screen.findByLabelText("Rechercher un patient"),
+    "helene",
+  );
   expect(
     await screen.findByRole("button", { name: "LEFÈVRE Hélène" }),
   ).toBeInTheDocument();
@@ -148,8 +151,8 @@ test("recherche insensible aux accents", async () => {
   ).not.toBeInTheDocument();
   expect(invoke).toHaveBeenLastCalledWith("list_patients", { query: "helene" });
 
-  await user.clear(screen.getByLabelText("Rechercher"));
-  await user.type(screen.getByLabelText("Rechercher"), "zzz");
+  await user.clear(screen.getByLabelText("Rechercher un patient"));
+  await user.type(screen.getByLabelText("Rechercher un patient"), "zzz");
   expect(await screen.findByText("Aucun patient trouvé.")).toBeInTheDocument();
 });
 
