@@ -306,6 +306,39 @@ test("filtrer puis exporter en PDF ce qui est affiché", async () => {
   expect(screen.getByText("4 factures")).toBeInTheDocument();
 });
 
+test("exporter seulement les factures cochées", async () => {
+  const { user } = await setup([
+    { ...INVOICE },
+    { ...INVOICE, id: 2, number: "2026-10-002", issued_on: "2026-10-17" },
+    { ...INVOICE, id: 3, number: "2026-10-003", issued_on: "2026-10-18" },
+  ]);
+  await user.click(
+    await screen.findByRole("checkbox", { name: "Facture 2026-10-002" }),
+  );
+  expect(screen.getByText("3 factures")).toBeInTheDocument();
+  expect(
+    screen.getByRole("checkbox", { name: "Tout sélectionner" }),
+  ).not.toBeChecked();
+
+  vi.mocked(open).mockResolvedValue("/Users/x/Factures");
+  await user.click(screen.getByRole("button", { name: "Exporter en PDF (2)" }));
+  expect(invoke).toHaveBeenCalledWith("export_invoice_pdfs", {
+    ids: [3, 1],
+    folder: "/Users/x/Factures",
+  });
+
+  // Unticking all leaves nothing to export; a filter change ticks them back.
+  await user.click(screen.getByRole("checkbox", { name: "Tout sélectionner" }));
+  await user.click(screen.getByRole("checkbox", { name: "Tout sélectionner" }));
+  expect(
+    screen.getByRole("button", { name: "Exporter en PDF (0)" }),
+  ).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Réinitialiser" }));
+  expect(
+    screen.getByRole("button", { name: "Exporter en PDF (3)" }),
+  ).toBeEnabled();
+});
+
 test("aucune facture ne correspond", async () => {
   const { user } = await setup();
   await user.type(await screen.findByLabelText("Au"), "2026-01-01");
