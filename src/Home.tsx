@@ -3,8 +3,7 @@ import { Icon, type IconName } from "./icons";
 import { AccountingPage } from "./accounting/AccountingPage";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { CollectionsPage } from "./collections/CollectionsPage";
-import { ExpensesPage } from "./expenses/ExpensesPage";
-import { FixedAssetsPage } from "./fixedAssets/FixedAssetsPage";
+import { SpendingPage } from "./expenses/SpendingPage";
 import { QuickSearch } from "./search/QuickSearch";
 import { lockApi } from "./lock/api";
 import { useIdle } from "./lock/useIdle";
@@ -20,7 +19,6 @@ type Page =
   | "invoices"
   | "collections"
   | "expenses"
-  | "assets"
   | "accounting"
   | "settings";
 
@@ -31,7 +29,6 @@ const PAGES: Record<Page, string> = {
   invoices: "Factures",
   collections: "Encaissements",
   expenses: "Dépenses",
-  assets: "Immobilisations",
   accounting: "Comptabilité",
   settings: "Paramètres",
 };
@@ -43,7 +40,6 @@ const ICONS: Record<Page, IconName> = {
   invoices: "file",
   collections: "wallet",
   expenses: "receipt",
-  assets: "package",
   accounting: "book",
   settings: "settings",
 };
@@ -51,7 +47,7 @@ const ICONS: Record<Page, IconName> = {
 /** Daily pages first; bookkeeping below; settings sit with the other actions. */
 const NAV: [string, Page[]][] = [
   ["Cabinet", ["home", "patients", "sessions", "invoices", "collections"]],
-  ["Gestion", ["expenses", "assets", "accounting"]],
+  ["Gestion", ["expenses", "accounting"]],
 ];
 
 /** Where to land on arrival; `seq` remounts the page even for the same page. */
@@ -177,8 +173,7 @@ function Home({
         {page === "collections" && (
           <CollectionsPage onOpenInvoice={(id) => go("invoices", { id })} />
         )}
-        {page === "expenses" && <ExpensesPage />}
-        {page === "assets" && <FixedAssetsPage />}
+        {page === "expenses" && <SpendingPage />}
         {page === "accounting" && <AccountingPage />}
         {page === "settings" && autoLock !== null && (
           <SettingsPage

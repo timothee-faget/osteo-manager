@@ -587,7 +587,7 @@ form.confirm > button {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-/* Segmented control (theme choice). */
+/* Segmented control (theme choice, page tabs). */
 .segmented {
   align-self: flex-start;
   display: inline-flex;
@@ -604,10 +604,15 @@ form.confirm > button {
   color: var(--ink-soft);
 }
 
-.segmented button[aria-pressed="true"] {
+.segmented button[aria-pressed="true"],
+.segmented button[aria-selected="true"] {
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow-pill);
+}
+
+.tabs {
+  margin-bottom: var(--space-4);
 }
 
 /* --- Messages --- */
