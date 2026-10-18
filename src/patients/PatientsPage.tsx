@@ -180,7 +180,7 @@ function fullName(p: Patient) {
   return p.civility ? `${CIVILITIES[p.civility]} ${name}` : name;
 }
 
-/** The record during a consultation: sessions on the left, clinical notes on the right. */
+/** The record during a consultation: clinical notes on the left, sessions on the right. */
 function PatientRecord({
   id,
   newSession,
@@ -251,13 +251,6 @@ function PatientRecord({
         </div>
       )}
       <div className="record-grid">
-        <div className="card">
-          <SessionsSection
-            patientId={patient.id}
-            startNew={newSession}
-            openSessionId={sessionId}
-          />
-        </div>
         <div className="record-side">
           <div className="card">
             <ClinicalNotesForm initial={patient} onSubmit={update} />
@@ -265,6 +258,13 @@ function PatientRecord({
           <div className="card">
             <AttachmentsSection patientId={patient.id} />
           </div>
+        </div>
+        <div className="card">
+          <SessionsSection
+            patientId={patient.id}
+            startNew={newSession}
+            openSessionId={sessionId}
+          />
         </div>
       </div>
     </section>
