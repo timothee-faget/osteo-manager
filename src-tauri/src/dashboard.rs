@@ -15,7 +15,7 @@ use crate::settings::{self, BillingSettings};
 
 type Result<T> = std::result::Result<T, SessionError>;
 
-const RECENT_SESSIONS: i64 = 10;
+const RECENT_SESSIONS: i64 = 5;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Period {
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(d.unbilled_cents, 6000);
         // None of the seven invoices was sent.
         assert_eq!((d.unsent_count, d.unsent_cents), (7, 42000));
-        assert_eq!(d.recent_sessions.len(), 8);
+        assert_eq!(d.recent_sessions.len(), 5);
         assert_eq!(d.recent_sessions[0].starts_at, "2026-10-20T09:00");
         assert_eq!(
             d.by_location,

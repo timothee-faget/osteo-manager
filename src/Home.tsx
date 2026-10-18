@@ -10,11 +10,13 @@ import { lockApi } from "./lock/api";
 import { useIdle } from "./lock/useIdle";
 import { InvoicesPage } from "./invoices/InvoicesPage";
 import { PatientsPage } from "./patients/PatientsPage";
+import { SessionHistoryPage } from "./patients/SessionHistoryPage";
 import { SettingsPage } from "./settings/SettingsPage";
 
 type Page =
   | "home"
   | "patients"
+  | "sessions"
   | "invoices"
   | "collections"
   | "expenses"
@@ -25,6 +27,7 @@ type Page =
 const PAGES: Record<Page, string> = {
   home: "Accueil",
   patients: "Patients",
+  sessions: "Séances",
   invoices: "Factures",
   collections: "Encaissements",
   expenses: "Dépenses",
@@ -36,6 +39,7 @@ const PAGES: Record<Page, string> = {
 const ICONS: Record<Page, IconName> = {
   home: "home",
   patients: "users",
+  sessions: "activity",
   invoices: "file",
   collections: "wallet",
   expenses: "receipt",
@@ -46,7 +50,7 @@ const ICONS: Record<Page, IconName> = {
 
 /** Daily pages first; bookkeeping below; settings sit with the other actions. */
 const NAV: [string, Page[]][] = [
-  ["Cabinet", ["home", "patients", "invoices", "collections"]],
+  ["Cabinet", ["home", "patients", "sessions", "invoices", "collections"]],
   ["Gestion", ["expenses", "assets", "accounting"]],
 ];
 
@@ -148,6 +152,7 @@ function Home({
           <DashboardPage
             onOpenCollections={() => go("collections")}
             onOpenAccounting={() => go("accounting")}
+            onOpenSessions={() => go("sessions")}
             onOpenPatient={(id, opts) => go("patients", { id, ...opts })}
             onNewPatient={(name) => go("patients", { newPatientName: name })}
           />
@@ -159,6 +164,11 @@ function Home({
             newSession={target?.newSession}
             openSessionId={target?.sessionId}
             newPatientName={target?.newPatientName}
+          />
+        )}
+        {page === "sessions" && (
+          <SessionHistoryPage
+            onOpenSession={(id, sessionId) => go("patients", { id, sessionId })}
           />
         )}
         {page === "invoices" && (
