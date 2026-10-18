@@ -149,6 +149,7 @@ function Home({
             onOpenCollections={() => go("collections")}
             onOpenAccounting={() => go("accounting")}
             onOpenSessions={() => go("sessions")}
+            onOpenExpenses={() => go("expenses")}
             onOpenPatient={(id, opts) => go("patients", { id, ...opts })}
             onNewPatient={(name) => go("patients", { newPatientName: name })}
           />

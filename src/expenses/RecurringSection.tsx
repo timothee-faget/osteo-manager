@@ -12,6 +12,7 @@ import {
   type RecurringInput,
 } from "./api";
 import { CategorySelect, MethodSelect } from "./ExpenseForm";
+import { MonthPicker } from "./MonthPicker";
 
 type Draft = Omit<RecurringInput, "amount_cents" | "day_of_month"> & {
   amount: string;
@@ -194,14 +195,11 @@ export function RecurringSection({
               onChange={(e) => set({ day: e.target.value })}
             />
           </label>
-          <label>
-            À partir de
-            <input
-              type="month"
-              value={editing.draft.start_month}
-              onChange={(e) => set({ start_month: e.target.value })}
-            />
-          </label>
+          <MonthPicker
+            label="À partir de"
+            value={editing.draft.start_month}
+            onChange={(start_month) => set({ start_month })}
+          />
           {feedback}
           <div className="actions">
             <button type="submit" disabled={busy}>

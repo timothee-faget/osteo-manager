@@ -43,6 +43,7 @@ export function DashboardPage({
   onOpenCollections,
   onOpenAccounting,
   onOpenSessions,
+  onOpenExpenses,
 }: {
   onOpenPatient: (
     id: number,
@@ -52,6 +53,7 @@ export function DashboardPage({
   onOpenCollections: () => void;
   onOpenAccounting: () => void;
   onOpenSessions: () => void;
+  onOpenExpenses: () => void;
 }) {
   const [d, setD] = useState<Dashboard | null>(null);
   const [firstName, setFirstName] = useState("");
@@ -287,6 +289,17 @@ export function DashboardPage({
               "Relancer",
               () => toggle("reminders"),
               "reminders",
+            )}
+            {todo(
+              "receipt",
+              d.transfers_due_count,
+              d.transfers_due_count > 1
+                ? `${d.transfers_due_count} virements récurrents à confirmer`
+                : "1 virement récurrent à confirmer",
+              formatEuros(d.transfers_due_cents),
+              "Aucun virement récurrent à confirmer",
+              "Confirmer",
+              onOpenExpenses,
             )}
           </ul>
         </section>

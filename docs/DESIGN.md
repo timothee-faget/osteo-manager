@@ -91,6 +91,7 @@ Quatre variantes, pas une de plus :
 ## 7. Composants partagés
 
 - **Onglets de page** : `.segmented.tabs` en `role="tablist"`, boutons `role="tab"` avec `aria-selected`, au-dessus du `<header>` de la page (ex. Dépenses / Immobilisations).
+- **Choix d'un mois** : `MonthPicker` (`src/expenses/MonthPicker.tsx`), un bouton qui ouvre une grille de 12 mois avec `YearNav`. Jamais `input type="month"`, mal géré par le moteur web de macOS.
 - **Changement d'année** : `YearNav` (`src/YearNav.tsx`). Chevrons `Icon` à gauche de l'année, total éventuel à droite. Jamais de glyphes ◀ ▶.
 - **Bloc repliable** hors paramètres : `<details className="disclosure">` avec un `Icon name="chevron"` dans le `summary`, comme `Fold`. Jamais le triangle natif.
 - **Recherche** : `.search-field` (icône loupe + `input type="search"`), en pilule, partout où l'on cherche (accueil, recherche rapide, liste des patients).

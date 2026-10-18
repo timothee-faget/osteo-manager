@@ -233,6 +233,15 @@ test("créer puis arrêter une charge récurrente", async () => {
   const day = f.getByLabelText("Jour de paiement");
   await user.clear(day);
   await user.type(day, "5");
+  // Start month: a grid of months, with arrows to change year.
+  await user.click(f.getByLabelText("À partir de"));
+  const picker = within(f.getByRole("dialog", { name: "À partir de" }));
+  await user.click(picker.getByRole("button", { name: "Année suivante" }));
+  await user.click(picker.getByRole("button", { name: `février ${YEAR + 1}` }));
+  expect(f.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(f.getByLabelText("À partir de")).toHaveTextContent(
+    `février ${YEAR + 1}`,
+  );
   await user.click(f.getByRole("button", { name: "Enregistrer la charge" }));
 
   const row = (await screen.findByText("Loyer")).closest("tr")!;
@@ -243,6 +252,7 @@ test("créer puis arrêter une charge récurrente", async () => {
     day_of_month: 5,
     category: "rent",
     method: "direct_debit",
+    start_month: `${YEAR + 1}-02`,
   });
 
   await user.click(within(row).getByRole("button", { name: "Arrêter" }));

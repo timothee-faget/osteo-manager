@@ -7,7 +7,7 @@ use rusqlite::{Connection, params};
 use serde::Serialize;
 
 use crate::cheque_deposits;
-use crate::expenses::RETROCESSION;
+use crate::expenses::{self, ExpenseMethod, RETROCESSION};
 use crate::invoices;
 use crate::session::{SessionError, State};
 use crate::sessions::{self, RecentSession, UnbilledSession};
@@ -66,6 +66,10 @@ pub struct Dashboard {
     pub unsent_cents: i64,
     /// The latest sessions, newest first, with their billing status.
     pub recent_sessions: Vec<RecentSession>,
+    /// Recurring expenses paid by transfer whose due date has passed, waiting to be
+    /// confirmed, and their total.
+    pub transfers_due_count: i64,
+    pub transfers_due_cents: i64,
 }
 
 fn iso(d: NaiveDate) -> String {
@@ -176,6 +180,10 @@ pub fn dashboard(conn: &Connection, today: NaiveDate) -> Result<Dashboard> {
     let cheques = cheque_deposits::pending(conn)?;
     let unbilled = sessions::unbilled(conn)?;
     let unsent = invoices::list_unsent(conn)?;
+    let transfers: Vec<_> = expenses::due(conn, today)?
+        .into_iter()
+        .filter(|d| d.method == ExpenseMethod::Transfer)
+        .collect();
     Ok(Dashboard {
         month: period(conn, first_of_month(today), today, &rates)?,
         month_last_year: period(conn, first_of_month(last_year), last_year, &rates)?,
@@ -191,6 +199,8 @@ pub fn dashboard(conn: &Connection, today: NaiveDate) -> Result<Dashboard> {
         unsent_count: unsent.len() as i64,
         unsent_cents: unsent.iter().map(|i| i.invoice.amount_cents).sum(),
         recent_sessions: sessions::recent(conn, RECENT_SESSIONS)?,
+        transfers_due_count: transfers.len() as i64,
+        transfers_due_cents: transfers.iter().map(|d| d.amount_cents).sum(),
     })
 }
 
@@ -202,7 +212,7 @@ pub fn get_dashboard(state: State) -> Result<Dashboard> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expenses::{self, ExpenseInput, ExpenseMethod};
+    use crate::expenses::{ExpenseInput, RecurringInput};
     use crate::payments::{self, PaymentInput, PaymentMethod};
     use crate::test_support::{Fixture, day, fixture};
 
@@ -231,6 +241,31 @@ mod tests {
             category: category.into(),
         };
         expenses::create(&mut f.conn, &dir, &input, None, None, day("2026-12-31")).unwrap();
+    }
+
+    #[test]
+    fn recurring_transfers_due_are_to_confirm() {
+        let f = fixture();
+        let recurring = |label: &str, method, day_of_month| {
+            let input = RecurringInput {
+                label: label.into(),
+                supplier: String::new(),
+                amount_cents: 80000,
+                method,
+                category: "rent".into(),
+                day_of_month,
+                start_month: "2026-10".into(),
+            };
+            expenses::create_recurring(&f.conn, &input).unwrap()
+        };
+        recurring("Loyer", ExpenseMethod::Transfer, 5);
+        // Not due yet.
+        recurring("Assurance", ExpenseMethod::Transfer, 20);
+        // Direct debits need no action.
+        recurring("Doctolib", ExpenseMethod::DirectDebit, 5);
+
+        let d = dashboard(&f.conn, day("2026-10-17")).unwrap();
+        assert_eq!((d.transfers_due_count, d.transfers_due_cents), (1, 80000));
     }
 
     #[test]

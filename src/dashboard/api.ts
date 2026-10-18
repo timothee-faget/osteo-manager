@@ -49,6 +49,9 @@ export type Dashboard = {
   unsent_count: number;
   unsent_cents: number;
   recent_sessions: RecentSession[];
+  /** Recurring expenses paid by transfer, due and not confirmed yet. */
+  transfers_due_count: number;
+  transfers_due_cents: number;
 };
 
 export const dashboardApi = {
