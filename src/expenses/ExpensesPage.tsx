@@ -164,39 +164,41 @@ export function ExpensesPage() {
       {expenses.length === 0 ? (
         <p>Aucune dépense en {year}.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Fournisseur</th>
-              <th>Catégorie</th>
-              <th>Mode</th>
-              <th className="num">Montant</th>
-              <th>Justificatif</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map((e) => (
-              <tr key={e.id}>
-                <td>{formatDate(e.paid_on)}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => setEditing({ kind: "edit", expense: e })}
-                  >
-                    {e.supplier}
-                  </button>
-                  {e.label && ` — ${e.label}`}
-                </td>
-                <td>{categoryLabel(e.category)}</td>
-                <td>{EXPENSE_METHODS[e.method]}</td>
-                <td className="num">{formatEuros(e.amount_cents)}</td>
-                <td>{e.receipt ? "Oui" : "—"}</td>
+        <div className="card table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Fournisseur</th>
+                <th>Catégorie</th>
+                <th>Mode</th>
+                <th className="num">Montant</th>
+                <th>Justificatif</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {expenses.map((e) => (
+                <tr key={e.id}>
+                  <td>{formatDate(e.paid_on)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => setEditing({ kind: "edit", expense: e })}
+                    >
+                      {e.supplier}
+                    </button>
+                    {e.label && ` — ${e.label}`}
+                  </td>
+                  <td>{categoryLabel(e.category)}</td>
+                  <td>{EXPENSE_METHODS[e.method]}</td>
+                  <td className="num">{formatEuros(e.amount_cents)}</td>
+                  <td>{e.receipt ? "Oui" : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       <RecurringSection
         recurring={recurring}

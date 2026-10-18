@@ -722,12 +722,19 @@ form.confirm > button {
 .card > h3:first-child,
 .card > form:first-child > h3:first-child,
 .expense-form > h3:first-child,
-.card > header:first-child h3 {
+.card > header:first-child h3,
+.card > h4:first-child {
   margin-top: 0;
+}
+
+/* A card holding a table (and its heading) is a block of the page. */
+.table-card {
+  margin: var(--space-5) 0;
 }
 
 /* Inside a card, nested cards lose their own frame. */
 .card .session-form,
+.card .expense-form,
 .card .card {
   padding: 0;
   box-shadow: none;

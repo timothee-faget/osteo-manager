@@ -34,49 +34,55 @@ export function KeyFigures() {
   const yearReceipts = d.by_location.reduce((t, l) => t + l.receipts_cents, 0);
 
   return (
-    <section>
-      <h3>Chiffres clés</h3>
-      <table className="figures" aria-label="Chiffres clés">
-        <thead>
-          <tr>
-            <th />
-            {columns.map(([label]) => (
-              <th key={label}>{label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {ROWS.map(([label, value]) => (
-            <tr key={label}>
-              <th scope="row">{label}</th>
-              {columns.map(([col, p]) => (
-                <td key={col}>{value(p)}</td>
+    <>
+      <section className="card table-card">
+        <h3>Chiffres clés</h3>
+        <table className="figures" aria-label="Chiffres clés">
+          <thead>
+            <tr>
+              <th />
+              {columns.map(([label]) => (
+                <th key={label}>{label}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>
-        Résultat avant amortissements. Provisions : impôt sur le résultat,
-        URSSAF sur le CA net des rétrocessions, aux taux réglés dans Paramètres.
-      </p>
-
-      <h3>CA encaissé par lieu depuis le 1er janvier</h3>
-      {d.by_location.length === 0 ? (
-        <p>Aucun encaissement cette année.</p>
-      ) : (
-        <table className="figures" aria-label="CA par lieu">
+          </thead>
           <tbody>
-            {d.by_location.map((l) => (
-              <tr key={l.location_name}>
-                <th scope="row">{l.location_name}</th>
-                <td>{formatEuros(l.receipts_cents)}</td>
-                <td>{Math.round((l.receipts_cents * 100) / yearReceipts)} %</td>
+            {ROWS.map(([label, value]) => (
+              <tr key={label}>
+                <th scope="row">{label}</th>
+                {columns.map(([col, p]) => (
+                  <td key={col}>{value(p)}</td>
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
-      )}
-    </section>
+        <p>
+          Résultat avant amortissements. Provisions : impôt sur le résultat,
+          URSSAF sur le CA net des rétrocessions, aux taux réglés dans
+          Paramètres.
+        </p>
+      </section>
+      <section className="card table-card">
+        <h3>CA encaissé par lieu depuis le 1er janvier</h3>
+        {d.by_location.length === 0 ? (
+          <p>Aucun encaissement cette année.</p>
+        ) : (
+          <table className="figures" aria-label="CA par lieu">
+            <tbody>
+              {d.by_location.map((l) => (
+                <tr key={l.location_name}>
+                  <th scope="row">{l.location_name}</th>
+                  <td>{formatEuros(l.receipts_cents)}</td>
+                  <td>
+                    {Math.round((l.receipts_cents * 100) / yearReceipts)} %
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </>
   );
 }

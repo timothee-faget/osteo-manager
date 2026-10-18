@@ -89,86 +89,88 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
           {shown.length === 0 ? (
             <p>Aucune facture ne correspond aux filtres.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>
-                    <input
-                      type="checkbox"
-                      aria-label="Tout sélectionner"
-                      checked={excluded.size === 0}
-                      onChange={() =>
-                        setExcluded(
-                          excluded.size === 0
-                            ? new Set(shown.map((i) => i.id))
-                            : new Set(),
-                        )
-                      }
-                    />
-                  </th>
-                  <th>N°</th>
-                  <th>Date</th>
-                  <th>Patient</th>
-                  <th className="num">Montant</th>
-                  <th>Paiement</th>
-                  <th>Envoi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((i) => (
-                  <tr
-                    key={i.id}
-                    className={i.credit_note ? "archived" : undefined}
-                  >
-                    <td>
+            <div className="card table-card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>
                       <input
                         type="checkbox"
-                        aria-label={`Facture ${i.number}`}
-                        checked={!excluded.has(i.id)}
-                        onChange={() => toggle(i.id)}
+                        aria-label="Tout sélectionner"
+                        checked={excluded.size === 0}
+                        onChange={() =>
+                          setExcluded(
+                            excluded.size === 0
+                              ? new Set(shown.map((i) => i.id))
+                              : new Set(),
+                          )
+                        }
                       />
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="link"
-                        onClick={() => setSelected(i.id)}
-                      >
-                        {i.number}
-                      </button>
-                      {i.credit_note && (
-                        <span className="badge">
-                          Annulée ({i.credit_note.number})
-                        </span>
-                      )}
-                    </td>
-                    <td>{formatDate(i.issued_on)}</td>
-                    <td>{i.patient_name}</td>
-                    <td className="num">{formatEuros(i.amount_cents)}</td>
-                    <td>
-                      {i.credit_note ? (
-                        "—"
-                      ) : (
-                        <span className={`status status-${i.payment_status}`}>
-                          {PAYMENT_STATUSES[i.payment_status]}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {i.sent_at ? (
-                        <span className="status status-sent">
-                          Envoyée le {formatDate(i.sent_at.slice(0, 10))}
-                        </span>
-                      ) : (
-                        <span className="status status-unsent">
-                          Non envoyée
-                        </span>
-                      )}
-                    </td>
+                    </th>
+                    <th>N°</th>
+                    <th>Date</th>
+                    <th>Patient</th>
+                    <th className="num">Montant</th>
+                    <th>Paiement</th>
+                    <th>Envoi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {shown.map((i) => (
+                    <tr
+                      key={i.id}
+                      className={i.credit_note ? "archived" : undefined}
+                    >
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Facture ${i.number}`}
+                          checked={!excluded.has(i.id)}
+                          onChange={() => toggle(i.id)}
+                        />
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => setSelected(i.id)}
+                        >
+                          {i.number}
+                        </button>
+                        {i.credit_note && (
+                          <span className="badge">
+                            Annulée ({i.credit_note.number})
+                          </span>
+                        )}
+                      </td>
+                      <td>{formatDate(i.issued_on)}</td>
+                      <td>{i.patient_name}</td>
+                      <td className="num">{formatEuros(i.amount_cents)}</td>
+                      <td>
+                        {i.credit_note ? (
+                          "—"
+                        ) : (
+                          <span className={`status status-${i.payment_status}`}>
+                            {PAYMENT_STATUSES[i.payment_status]}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {i.sent_at ? (
+                          <span className="status status-sent">
+                            Envoyée le {formatDate(i.sent_at.slice(0, 10))}
+                          </span>
+                        ) : (
+                          <span className="status status-unsent">
+                            Non envoyée
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

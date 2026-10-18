@@ -25,7 +25,7 @@ export function UnpaidInvoices({
   if (!unpaid) return null;
   const n = unpaid.invoices.length;
   return (
-    <section>
+    <section className="card table-card">
       <h3>Impayés</h3>
       {n === 0 ? (
         <p>Aucune facture impayée.</p>

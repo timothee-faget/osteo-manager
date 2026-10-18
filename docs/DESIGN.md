@@ -64,7 +64,7 @@ DM Sans uniquement, poids 400, 500 et 600 (jamais de gras 700).
 - **Page** : fond `--bg`, sans bordure.
 - **Carte** (`.card`) : `--surface`, ombre `--shadow`, rayon `--radius` (1rem), pas de bordure. Une carte regroupe un sujet (une liste, un formulaire), pas chaque élément.
 - **Tuile de chiffre clé** (`.kpi`) : fond `--tile` uni, rayon `--radius`, icône dans un rond `--surface`.
-- **Tableau** : jamais de fond ni de cadre propre. Posé sur la page ou dans une carte, en-têtes `--muted`, lignes séparées par `--line`.
+- **Tableau** : toujours dans une carte (`.card.table-card`, comme l'historique des séances), jamais de fond ni de cadre propre. Le titre et les boutons de la section vont dans la carte, les filtres restent au-dessus. En-têtes `--muted`, lignes séparées par `--line`.
   - Colonne de montants ou de pourcentages : `.num` sur le `th` **et** les `td` (aligné à droite, jamais coupé).
   - Nom de patient en cellule de texte simple : `.patient` (jamais coupé ; c'est le motif voisin qui passe à la ligne).
 - **Formulaire de saisie** (`.expense-form`) : largeur max 48rem, jamais étiré sur toute la page.

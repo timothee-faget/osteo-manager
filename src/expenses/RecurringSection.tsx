@@ -96,7 +96,7 @@ export function RecurringSection({
     setEditing({ ...editing, draft: { ...editing.draft, ...patch } });
 
   return (
-    <section>
+    <section className="card table-card">
       <h3>Charges récurrentes</h3>
       {recurring.length === 0 ? (
         <p>Aucune charge récurrente.</p>
