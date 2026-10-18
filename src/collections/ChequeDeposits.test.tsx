@@ -116,6 +116,9 @@ test("annuler une remise remet ses chèques à remettre", async () => {
   expect(
     await screen.findByText("Aucun chèque à remettre."),
   ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Chèques à remettre" }),
+  ).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Annuler la remise" }));
   await user.click(
