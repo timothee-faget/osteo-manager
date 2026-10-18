@@ -1110,7 +1110,6 @@ td > button + button {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: var(--space-3);
-  align-items: start;
   margin: var(--space-5) 0;
 }
 
