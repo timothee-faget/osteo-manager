@@ -25,6 +25,7 @@ Spec complète : @docs/SPEC.md
 - Une issue GitHub = une branche (`feat/<n>-slug`, `fix/<n>-slug`) = une PR qui référence `Closes #<n>`.
 - Écrire les tests de la logique métier (numérotation, avoirs, calculs comptables) avant l'implémentation.
 - Avant de terminer : lint, typecheck et tests au vert.
+- Note Obsidian du projet : `~/Documents/Tim's Vault/20-29 Mes Loisirs/21 Développement/21.34 Osteo Manager.md` (historique des versions à compléter après chaque release, liste « À faire » tenue à la main : ne pas réécrire ses entrées).
 
 ## Commandes
 
