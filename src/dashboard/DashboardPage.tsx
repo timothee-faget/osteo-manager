@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { formatMonth } from "../expenses/api";
 import { errorMessage } from "../lock/api";
 import { BatchSend } from "../mail/BatchSend";
 import { formatEuros } from "../money";
 import {
   formatDateTime,
+  formatShortDateTime,
   SESSION_STATUSES,
   sessionsApi,
 } from "../patients/sessionsApi";
@@ -161,7 +161,7 @@ export function DashboardPage({
       <div className="kpis">
         {kpi(
           "euro",
-          `CA encaissé en ${formatMonth(d.month.from.slice(0, 7))}`,
+          "CA encaissé ce mois",
           formatEuros(d.month.receipts_cents),
           evolution(
             d.month.receipts_cents,
@@ -223,7 +223,7 @@ export function DashboardPage({
                           })
                         }
                       >
-                        {formatDateTime(s.starts_at)}
+                        {formatShortDateTime(s.starts_at)}
                       </button>
                     </td>
                     <td className="patient">{s.patient_name}</td>
