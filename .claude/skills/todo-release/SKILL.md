@@ -16,11 +16,11 @@ Les règles de `CLAUDE.md` restent prioritaires (données de santé, factures im
 - Dépôt `timothee-faget/osteo-manager`, releases publiques `timothee-faget/osteo-manager-releases`
 - Board : projet n° 1 de `timothee-faget`, id `PVT_kwHOBlWjns4BnY6J`, champ Status `PVTSSF_lAHOBlWjns4BnY6Jzhl9xGk`, options Todo `f75ad846`, In Progress `47fc9ee4`, Done `98236657`
 
-Changer le statut d'une issue sur le board :
+Changer le statut d'une issue sur le board, en deux commandes séparées (pas de `$(…)` ni de variable : un run non interactif n'autorise que les commandes qui commencent par `gh`) :
 
 ```sh
-id=$(gh project item-list 1 --owner timothee-faget --format json --limit 300 --jq '.items[] | select(.content.number==<n>) | .id')
-gh project item-edit --project-id PVT_kwHOBlWjns4BnY6J --id "$id" --field-id PVTSSF_lAHOBlWjns4BnY6Jzhl9xGk --single-select-option-id <option>
+gh project item-list 1 --owner timothee-faget --format json --limit 300 --jq '.items[] | select(.content.number==<n>) | .id'
+gh project item-edit --project-id PVT_kwHOBlWjns4BnY6J --id <id lu ci-dessus> --field-id PVTSSF_lAHOBlWjns4BnY6Jzhl9xGk --single-select-option-id <option>
 ```
 
 ## 1. Lire la note
