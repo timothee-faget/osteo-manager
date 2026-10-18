@@ -51,6 +51,8 @@ test("bilan résumé, à traiter et détail dans Comptabilité", async () => {
     unsent_count: 0,
     unsent_cents: 0,
     recent_sessions: [],
+    transfers_due_count: 2,
+    transfers_due_cents: 160000,
   };
   state.practitioner.first_name = "Camille";
   render(<App />);
@@ -301,4 +303,37 @@ test("recherche : créer le patient tapé, puis sa séance", async () => {
     await screen.findByRole("heading", { name: "DURAND Marie" }),
   ).toBeInTheDocument();
   expect(await screen.findByLabelText("Motif")).toBeInTheDocument();
+});
+
+test("les virements récurrents échus mènent aux dépenses", async () => {
+  const user = userEvent.setup();
+  const state = fakeBackend("unlocked");
+  state.dashboard = {
+    month: period("2026-10-01", 0),
+    month_last_year: period("2025-10-01", 0),
+    year_to_date: period("2026-01-01", 0),
+    year_to_date_last_year: period("2025-01-01", 0),
+    by_location: [],
+    unpaid_count: 0,
+    unpaid_cents: 0,
+    cheques_to_deposit: 0,
+    cheques_to_deposit_cents: 0,
+    unbilled_sessions: [],
+    unbilled_cents: 0,
+    unsent_count: 0,
+    unsent_cents: 0,
+    recent_sessions: [],
+    transfers_due_count: 2,
+    transfers_due_cents: 160000,
+  };
+  render(<App />);
+
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Confirmer : 2 virements récurrents à confirmer",
+    }),
+  );
+  expect(
+    await screen.findByRole("heading", { name: "Dépenses" }),
+  ).toBeInTheDocument();
 });

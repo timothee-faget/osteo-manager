@@ -767,6 +767,8 @@ export function fakeBackend(initial: LockStatus) {
               state.invoices.filter((i) => !i.sent_at && !i.credit_note),
             ),
             recent_sessions: sessionRows().slice(0, 5),
+            transfers_due_count: 0,
+            transfers_due_cents: 0,
           }
         );
       }

@@ -1090,6 +1090,49 @@ td > button + button {
   margin-left: auto;
 }
 
+/* Month field: a button opening a 12-month grid. */
+.month-picker {
+  position: relative;
+}
+
+.month-picker label > button {
+  justify-content: flex-start;
+}
+
+.month-picker-pop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  width: 16rem;
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.month-picker-pop .year {
+  margin: 0 0 var(--space-3);
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.month-grid button {
+  height: var(--control-h-sm);
+  padding: 0;
+}
+
+.month-grid button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
 /* Accounting: the part driven by the year switcher, apart from the key figures. */
 .fiscal-year {
   margin-top: var(--space-6);

@@ -90,6 +90,7 @@ Calquées sur ses fiches Word actuelles (voir [legacy-data.md](legacy-data.md)) 
 
 - CA encaissé du mois et de l'année, nombre de séances, panier moyen.
 - Montant total des impayés et nombre de chèques à remettre.
+- Charges récurrentes payées par virement dont l'échéance est passée, à confirmer.
 - Dépenses, rétrocessions et résultat estimé.
 - **Provisions** à mettre de côté (impôt, URSSAF) selon les taux réglables.
 - Répartition du CA par lieu.
