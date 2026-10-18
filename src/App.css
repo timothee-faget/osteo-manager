@@ -1048,6 +1048,30 @@ td > button + button {
   margin-top: var(--space-5);
 }
 
+/* Fixed columns, so the 2035 sections read as one table and amounts line up
+   from the summary down to the journal. */
+table.summary,
+table.journal {
+  table-layout: fixed;
+}
+
+col.col-line {
+  width: 5rem;
+}
+
+col.col-date,
+col.col-method {
+  width: 7.5rem;
+}
+
+col.col-category {
+  width: 14rem;
+}
+
+col.col-amount {
+  width: 9rem;
+}
+
 /* --- Home --- */
 
 .kpis {
