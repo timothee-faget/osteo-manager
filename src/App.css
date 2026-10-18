@@ -126,6 +126,17 @@
 body {
   margin: 0;
   background: var(--bg);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Text stays selectable where it is typed or worth copying. */
+input,
+textarea,
+.session-notes,
+.patient-facts {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* --- Typography --- */
