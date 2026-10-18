@@ -394,6 +394,21 @@ Bien cordialement,
     ALTER TABLE patient DROP COLUMN digestive;
     ALTER TABLE patient DROP COLUMN gynecological;
     ALTER TABLE patient DROP COLUMN lifestyle;",
+    // v16: sessions given free of charge: never invoiced, no fee. An invoiced session
+    // cannot become free.
+    "ALTER TABLE session ADD COLUMN free_of_charge INTEGER NOT NULL DEFAULT 0
+        CHECK (free_of_charge IN (0, 1));
+    DROP TRIGGER session_billing_locked;
+    CREATE TRIGGER session_billing_locked BEFORE UPDATE ON session
+        WHEN EXISTS (
+            SELECT 1 FROM invoice i WHERE i.session_id = OLD.id
+            AND NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)
+        ) AND (
+            NEW.patient_id IS NOT OLD.patient_id OR NEW.location_id IS NOT OLD.location_id
+            OR NEW.starts_at IS NOT OLD.starts_at OR NEW.fee_cents IS NOT OLD.fee_cents
+            OR NEW.validated_at IS NOT OLD.validated_at
+            OR NEW.free_of_charge IS NOT OLD.free_of_charge)
+        BEGIN SELECT RAISE(ABORT, 'invoiced session billing fields are locked'); END;",
 ];
 
 #[derive(Debug, thiserror::Error)]

@@ -29,6 +29,7 @@ const session = (
   reason: "Lombalgie",
   notes: "",
   fee_cents: 6000,
+  free_of_charge: false,
   validated_at: null,
   invoice_id: null,
   invoice_number: null,

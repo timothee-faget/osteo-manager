@@ -49,6 +49,8 @@ const MESSAGES: Record<string, string> = {
   invalid_session: "Séance introuvable.",
   invalid_session_invoiced:
     "Cette séance est déjà facturée : le patient, le lieu, la date et le tarif ne peuvent plus changer.",
+  invalid_session_free:
+    "Cette séance est à titre gracieux : décochez la case pour la facturer.",
   invalid_practitioner_incomplete:
     "Complétez d'abord l'identité de la praticienne dans Paramètres (nom, prénom, RPPS, SIRET, adresse).",
   invalid_location_address_missing:

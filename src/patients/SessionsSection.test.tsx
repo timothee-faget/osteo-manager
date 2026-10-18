@@ -266,3 +266,32 @@ test("quitter la fiche enregistre la saisie en cours", async () => {
   await vi.waitFor(() => expect(state.sessions).toHaveLength(1));
   expect(state.sessions[0].reason).toBe("Lombalgie");
 });
+
+test("séance à titre gracieux : ni tarif ni facture", async () => {
+  const { user, state, s } = await setup();
+  await newSession(user, s, "Bilan");
+  await user.click(s.getByLabelText("À titre gracieux (pas de facture)"));
+  expect(s.queryByLabelText("Tarif")).not.toBeInTheDocument();
+  expect(
+    s.queryByRole("button", { name: "Valider et facturer" }),
+  ).not.toBeInTheDocument();
+  await user.click(s.getByRole("button", { name: "Fermer" }));
+
+  expect(await s.findByText("Gracieuse")).toBeInTheDocument();
+  expect(state.sessions[0]).toMatchObject({
+    free_of_charge: true,
+    fee_cents: 0,
+  });
+
+  // Unticked, it gets the location's fee back and can be invoiced.
+  await user.click(
+    s.getAllByRole("button", { name: /^\d{2}\/\d{2}\/\d{4}$/ })[0],
+  );
+  await user.click(
+    await s.findByLabelText("À titre gracieux (pas de facture)"),
+  );
+  expect(await s.findByDisplayValue("60,00")).toBeInTheDocument();
+  expect(
+    s.getByRole("button", { name: "Valider et facturer" }),
+  ).toBeInTheDocument();
+});

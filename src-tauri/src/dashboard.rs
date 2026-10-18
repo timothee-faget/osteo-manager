@@ -24,9 +24,10 @@ pub struct Period {
     pub to: String,
     /// Fees received.
     pub receipts_cents: i64,
-    /// Sessions held in the period and invoiced (cancelled invoices excluded).
+    /// Sessions held in the period and invoiced (cancelled invoices excluded), plus
+    /// those given free of charge.
     pub sessions: i64,
-    /// Average invoiced amount of those sessions; 0 without sessions.
+    /// Average invoiced amount of the invoiced sessions; 0 without any.
     pub average_cents: i64,
     /// Expenses paid, retrocessions excluded.
     pub expenses_cents: i64,
@@ -108,12 +109,18 @@ fn period(
         &f,
         &t,
     )?;
-    let (sessions, invoiced): (i64, i64) = conn.query_row(
+    let (invoiced_sessions, invoiced): (i64, i64) = conn.query_row(
         "SELECT COUNT(*), COALESCE(SUM(amount_cents), 0) FROM invoice i
          WHERE service_date BETWEEN ?1 AND ?2
          AND NOT EXISTS (SELECT 1 FROM credit_note c WHERE c.invoice_id = i.id)",
         params![f, t],
         |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let free_sessions: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM session
+         WHERE free_of_charge AND substr(starts_at, 1, 10) BETWEEN ?1 AND ?2",
+        params![f, t],
+        |r| r.get(0),
     )?;
     let expense_sum = |retrocession: bool| {
         conn.query_row(
@@ -131,9 +138,9 @@ fn period(
         from: f,
         to: t,
         receipts_cents,
-        sessions,
-        average_cents: if sessions > 0 {
-            (invoiced + sessions / 2) / sessions
+        sessions: invoiced_sessions + free_sessions,
+        average_cents: if invoiced_sessions > 0 {
+            (invoiced + invoiced_sessions / 2) / invoiced_sessions
         } else {
             0
         },
@@ -272,6 +279,8 @@ mod tests {
         spend(&mut f, "2026-10-05", "rent", 5000);
         spend(&mut f, "2026-10-06", RETROCESSION, 1000);
         let draft = f.session("2026-10-16T09:00");
+        // Counted as a session, but neither in the average nor to bill.
+        f.free_session("2026-10-16T10:00");
 
         let d = dashboard(&f.conn, day("2026-10-17")).unwrap();
         let m = &d.month;
@@ -281,7 +290,7 @@ mod tests {
         );
         assert_eq!(
             (m.receipts_cents, m.sessions, m.average_cents),
-            (12000, 3, 6000)
+            (12000, 4, 6000)
         );
         assert_eq!((m.expenses_cents, m.retrocessions_cents), (5000, 1000));
         assert_eq!(m.result_cents, 12000 - 1000 - 5000);
@@ -293,7 +302,7 @@ mod tests {
 
         assert_eq!(
             (d.year_to_date.receipts_cents, d.year_to_date.sessions),
-            (18000, 4)
+            (18000, 5)
         );
         assert_eq!(d.month_last_year.receipts_cents, 6000);
         assert_eq!(d.year_to_date_last_year.to, "2025-10-17");

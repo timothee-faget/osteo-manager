@@ -76,6 +76,7 @@ export function SessionForm({
           reason: "",
           notes: "",
           fee: centsToInput(fee),
+          free_of_charge: false,
         });
       }
     });
@@ -121,6 +122,15 @@ export function SessionForm({
     if (!draft) return;
     const fee = await sessionsApi.defaultFee(location_id);
     change({ ...draft, location_id, fee: centsToInput(fee) });
+  }
+
+  /** Back to paying, the session gets the location's fee again. */
+  async function changeFree(free_of_charge: boolean) {
+    if (!draft) return;
+    const fee = free_of_charge
+      ? draft.fee
+      : centsToInput(await sessionsApi.defaultFee(draft.location_id));
+    change({ ...draft, free_of_charge, fee });
   }
 
   async function run(action: () => Promise<void>) {
@@ -249,15 +259,27 @@ export function SessionForm({
             onChange={(e) => set({ notes: e.target.value })}
           />
         </label>
+        {!invoiced && (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={draft.free_of_charge}
+              onChange={(e) => void changeFree(e.target.checked)}
+            />
+            À titre gracieux (pas de facture)
+          </label>
+        )}
         {invoiced ? (
           <p>Tarif : {draft.fee} €</p>
         ) : (
-          <UnitField
-            label="Tarif"
-            unit="€"
-            value={draft.fee}
-            onChange={(fee) => set({ fee })}
-          />
+          !draft.free_of_charge && (
+            <UnitField
+              label="Tarif"
+              unit="€"
+              value={draft.fee}
+              onChange={(fee) => set({ fee })}
+            />
+          )
         )}
         {error && <p role="alert">{error}</p>}
 
@@ -291,13 +313,15 @@ export function SessionForm({
         ) : (
           !invoiced && (
             <div className="actions">
-              <button
-                type="button"
-                className="primary"
-                onClick={() => setConfirm("validate")}
-              >
-                Valider et facturer
-              </button>
+              {!draft.free_of_charge && (
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => setConfirm("validate")}
+                >
+                  Valider et facturer
+                </button>
+              )}
               {(session || saveState) && (
                 <button type="button" onClick={() => setConfirm("delete")}>
                   Supprimer

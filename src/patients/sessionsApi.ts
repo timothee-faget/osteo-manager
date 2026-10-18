@@ -4,9 +4,10 @@ import type { PaymentStatus } from "../invoices/paymentsApi";
 
 /** Billing progress of a session, most advanced step only. */
 export type SessionStatus =
-  "unbilled" | "invoiced" | "sent" | "partially_paid" | "paid";
+  "free" | "unbilled" | "invoiced" | "sent" | "partially_paid" | "paid";
 
 export const SESSION_STATUSES: Record<SessionStatus, string> = {
+  free: "Gracieuse",
   unbilled: "Non facturée",
   invoiced: "Facturée",
   sent: "Envoyée",
@@ -21,7 +22,10 @@ export type SessionInput = {
   starts_at: string;
   reason: string;
   notes: string;
+  /** Always 0 for a session given free of charge. */
   fee_cents: number;
+  /** Given free of charge: never invoiced. */
+  free_of_charge: boolean;
 };
 
 export type Session = SessionInput & {
