@@ -104,6 +104,41 @@ test("paramètres SMTP : mot de passe au trousseau, puis e-mail de test", async 
   expect(state.smtpPassword).toBe("secret");
 });
 
+test("le choix du fournisseur remplit le serveur et affiche son aide", async () => {
+  const user = userEvent.setup();
+  fakeBackend("unlocked");
+  render(<App />);
+  const s = await mailSection(user);
+  expect(s.getByLabelText("Fournisseur")).toHaveValue("");
+
+  await user.selectOptions(s.getByLabelText("Fournisseur"), "Gmail");
+  expect(s.getByLabelText("Serveur SMTP")).toHaveValue("smtp.gmail.com");
+  expect(s.getByLabelText("Port")).toHaveValue("587");
+  expect(s.getByLabelText("Sécurité")).toHaveValue("starttls");
+  await user.click(s.getByText("Aide à la configuration"));
+  expect(s.getByText(/myaccount\.google\.com\/apppasswords/)).toBeVisible();
+
+  await user.selectOptions(s.getByLabelText("Fournisseur"), "Orange");
+  expect(s.getByLabelText("Serveur SMTP")).toHaveValue("smtp.orange.fr");
+  expect(s.getByLabelText("Port")).toHaveValue("465");
+  expect(s.getByLabelText("Sécurité")).toHaveValue("tls");
+  expect(s.queryByText(/apppasswords/)).toBeNull();
+
+  // Another provider keeps what is typed, with the general help only.
+  await user.selectOptions(s.getByLabelText("Fournisseur"), "Autre");
+  expect(s.getByLabelText("Serveur SMTP")).toHaveValue("smtp.orange.fr");
+  expect(s.getByText(/paramètres SMTP/)).toBeVisible();
+});
+
+test("le fournisseur enregistré est reconnu à l'ouverture", async () => {
+  const user = userEvent.setup();
+  const state = fakeBackend("unlocked");
+  state.mail = { ...state.mail, host: "smtp.mail.me.com" };
+  render(<App />);
+  const s = await mailSection(user);
+  expect(s.getByLabelText("Fournisseur")).toHaveValue("icloud");
+});
+
 test("port invalide refusé sans appel", async () => {
   const user = userEvent.setup();
   fakeBackend("unlocked");

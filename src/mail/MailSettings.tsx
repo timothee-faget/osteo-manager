@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Icon } from "../icons";
 import { useSave } from "../settings/useSave";
+import { PROVIDERS, providerOf } from "./providers";
 import {
   mailApi,
   PLACEHOLDERS,
@@ -15,12 +17,15 @@ type Draft = Omit<Settings, "port"> & { port: string; password: string };
 /** Outgoing mail server. */
 export function MailSettings() {
   const [form, setForm] = useState<Draft | null>(null);
+  /** A provider id, "other", or "" before any choice. */
+  const [provider, setProvider] = useState("");
   const { busy, save, setMessage, feedback } = useSave();
 
   useEffect(() => {
-    void mailApi
-      .settings()
-      .then((s) => setForm({ ...s, port: String(s.port), password: "" }));
+    void mailApi.settings().then((s) => {
+      setForm({ ...s, port: String(s.port), password: "" });
+      setProvider(providerOf(s.host)?.id ?? (s.host.trim() ? "other" : ""));
+    });
   }, []);
 
   /** Saves the form; the password only if one was typed. */
@@ -55,7 +60,22 @@ export function MailSettings() {
     }
   }
 
+  /** A known provider fills in its server; "Autre" keeps what is typed. */
+  function chooseProvider(id: string) {
+    setProvider(id);
+    const p = PROVIDERS.find((p) => p.id === id);
+    if (form && p) {
+      setForm({
+        ...form,
+        host: p.host,
+        port: String(p.port),
+        security: p.security,
+      });
+    }
+  }
+
   if (!form) return null;
+  const chosen = PROVIDERS.find((p) => p.id === provider);
   const input = (key: keyof Draft, label: string, type = "text") => (
     <label>
       {label}
@@ -69,10 +89,76 @@ export function MailSettings() {
 
   return (
     <form onSubmit={(e) => void submit(e)}>
-      <small>
-        Gmail : smtp.gmail.com, port 587, avec un mot de passe d'application.
-        Orange : smtp.orange.fr, port 465. Free : smtp.free.fr, port 465.
-      </small>
+      <label className="mail-provider">
+        Fournisseur
+        <select
+          value={provider}
+          onChange={(e) => chooseProvider(e.target.value)}
+        >
+          <option value="" disabled>
+            Choisir…
+          </option>
+          {PROVIDERS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+          <option value="other">Autre</option>
+        </select>
+      </label>
+      <details className="disclosure mail-help">
+        <summary>
+          <Icon name="chevron" />
+          Aide à la configuration
+        </summary>
+        {chosen && (
+          <>
+            <h4>{chosen.name}</h4>
+            <ol>
+              {chosen.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </>
+        )}
+        {provider === "other" && (
+          <p>
+            Cherchez « paramètres SMTP » dans l'aide de votre messagerie : elle
+            donne le serveur, le port et la sécurité à utiliser.
+          </p>
+        )}
+        <h4>Les champs</h4>
+        <ul>
+          <li>
+            <strong>Serveur SMTP</strong> : le serveur d'envoi de votre
+            messagerie, par exemple smtp.gmail.com.
+          </li>
+          <li>
+            <strong>Port et sécurité</strong> : 587 avec STARTTLS, ou 465 avec
+            SSL/TLS. Choisir un fournisseur les remplit.
+          </li>
+          <li>
+            <strong>Identifiant</strong> : le plus souvent votre adresse e-mail
+            complète.
+          </li>
+          <li>
+            <strong>Mot de passe</strong> : celui de la messagerie, ou un mot de
+            passe d'application si le compte a la validation en deux étapes.
+          </li>
+          <li>
+            <strong>Adresse d'expédition</strong> : l'adresse que verront les
+            patients, en général la même que l'identifiant.
+          </li>
+          <li>
+            <strong>Nom affiché</strong> : le nom de l'expéditeur, par exemple
+            celui du cabinet.
+          </li>
+        </ul>
+        <p>
+          Enregistrez puis cliquez sur « Envoyer un e-mail de test » : il arrive
+          dans votre propre boîte si tout est bon.
+        </p>
+      </details>
       <div className="fields">
         {input("host", "Serveur SMTP")}
         {input("port", "Port")}
