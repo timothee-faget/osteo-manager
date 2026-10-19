@@ -990,6 +990,18 @@ tbody tr:hover > * {
   border-top: none;
 }
 
+/* A table opening a card starts at the card's padding: no margin, and a
+   header row only as tall as its labels. */
+.card > table:first-child {
+  margin-top: 0;
+}
+
+.card > table:first-child thead th {
+  height: auto;
+  padding-top: 0;
+  padding-bottom: var(--space-2);
+}
+
 .card th:first-child,
 .card td:first-child {
   padding-left: 0;
