@@ -50,11 +50,12 @@ async function setup(invoices: InvoiceView[] = [{ ...INVOICE }]) {
 
 async function openInvoice(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: "2026-10-001" }));
-  return within(
-    (
-      await screen.findByRole("heading", { name: /^Facture 2026-10-001/ })
-    ).closest(".invoice-detail") as HTMLElement,
-  );
+  const heading = await screen.findByRole("heading", {
+    name: /^Facture 2026-10-001/,
+  });
+  // The detail opens above the list: it takes the focus.
+  expect(heading).toHaveFocus();
+  return within(heading.closest(".invoice-detail") as HTMLElement);
 }
 
 test("aucune facture", async () => {
@@ -119,6 +120,11 @@ test("statut d'envoi", async () => {
 test("annulation par un avoir", async () => {
   const { user, state } = await setup();
   const d = await openInvoice(user);
+  await user.click(d.getByRole("button", { name: "Annuler par un avoir…" }));
+  await user.click(d.getByRole("button", { name: "Garder la facture" }));
+  expect(
+    d.queryByText(/La séance redeviendra modifiable/),
+  ).not.toBeInTheDocument();
   await user.click(d.getByRole("button", { name: "Annuler par un avoir…" }));
   expect(d.getByText(/La séance redeviendra modifiable/)).toBeInTheDocument();
   await user.type(

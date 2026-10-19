@@ -44,6 +44,7 @@ export function RecurringSection({
   onChange: () => void;
 }) {
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [confirmStop, setConfirmStop] = useState<number | null>(null);
   const { busy, save, setMessage, feedback } = useSave();
   const categoryLabel = (code: string) =>
     categories.find((c) => c.code === code)?.label ?? code;
@@ -130,17 +131,35 @@ export function RecurringSection({
                   <button type="button" onClick={() => edit(r)}>
                     Modifier
                   </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void save(
-                        () => expensesApi.archiveRecurring(r.id),
-                        "Charge récurrente arrêtée.",
-                      ).then(onChange)
-                    }
-                  >
-                    Arrêter
-                  </button>
+                  {confirmStop === r.id ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void save(
+                            () => expensesApi.archiveRecurring(r.id),
+                            "Charge récurrente arrêtée.",
+                          ).then(() => {
+                            setConfirmStop(null);
+                            onChange();
+                          })
+                        }
+                      >
+                        Confirmer l'arrêt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmStop(null)}
+                      >
+                        Annuler
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => setConfirmStop(r.id)}>
+                      Arrêter
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

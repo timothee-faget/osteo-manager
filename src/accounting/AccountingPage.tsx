@@ -2,6 +2,7 @@ import { YearNav } from "../YearNav";
 import { useEffect, useState } from "react";
 import { KeyFigures } from "../dashboard/KeyFigures";
 import { formatEuros } from "../money";
+import { usePaging } from "../paging";
 import { formatDate } from "../patients/api";
 import { useSave } from "../settings/useSave";
 import { accountingApi, type Export, type Journal, type Summary } from "./api";
@@ -29,6 +30,7 @@ export function AccountingPage() {
     journal: Journal;
   } | null>(null);
   const { busy, save, setMessage, feedback } = useSave();
+  const page = usePaging();
 
   useEffect(() => {
     void load(year).then(setData);
@@ -44,6 +46,7 @@ export function AccountingPage() {
 
   if (!data) return null;
   const { summary, journal } = data;
+  const [entries, more] = page(journal.entries);
   return (
     <section>
       <h2>Comptabilité</h2>
@@ -135,7 +138,7 @@ export function AccountingPage() {
                 </tr>
               </thead>
               <tbody>
-                {journal.entries.map((e, i) => (
+                {entries.map((e, i) => (
                   <tr key={i}>
                     <td>{formatDate(e.date)}</td>
                     <td>
@@ -163,6 +166,7 @@ export function AccountingPage() {
               </tbody>
             </table>
           )}
+          {more}
         </div>
       </section>
     </section>

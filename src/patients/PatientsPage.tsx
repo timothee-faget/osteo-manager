@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { errorMessage } from "../lock/api";
 import {
@@ -197,9 +197,16 @@ function PatientRecord({
   const [patient, setPatient] = useState<Patient | null>(null);
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** The record as last saved, which each save completes. */
+  const latest = useRef<Patient | null>(null);
+  /** Saves run one after the other, each on top of the previous one. */
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
-    void patientsApi.get(id).then(setPatient);
+    void patientsApi.get(id).then((p) => {
+      latest.current = p;
+      setPatient(p);
+    });
   }, [id]);
 
   async function exportRecord(p: Patient) {
@@ -212,10 +219,15 @@ function PatientRecord({
   }
 
   if (!patient) return null;
-  const update = async (patch: Partial<PatientInput>) => {
-    const p = await patientsApi.update(id, { ...patient, ...patch });
-    setPatient(p);
-    return p;
+  const update = (patch: Partial<PatientInput>) => {
+    const saved = queue.current.then(async () => {
+      const p = await patientsApi.update(id, { ...latest.current!, ...patch });
+      latest.current = p;
+      setPatient(p);
+      return p;
+    });
+    queue.current = saved.catch(() => {});
+    return saved;
   };
   return (
     <section>
@@ -247,7 +259,6 @@ function PatientRecord({
           <IdentityForm
             initial={patient}
             isMinor={patient.is_minor}
-            submitLabel="Enregistrer la fiche"
             onSubmit={update}
           />
         </div>

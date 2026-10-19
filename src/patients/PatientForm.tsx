@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { errorMessage } from "../lock/api";
 import { useSave } from "../settings/useSave";
 import {
   CIVILITIES,
@@ -7,6 +8,7 @@ import {
   type Patient,
   type PatientInput,
 } from "./api";
+import { AUTOSAVE_MS } from "./SessionForm";
 
 type TextKey = {
   [K in keyof PatientInput]: PatientInput[K] extends string ? K : never;
@@ -61,17 +63,58 @@ type Submit = (patch: Partial<PatientInput>) => Promise<Patient>;
 
 /**
  * State of a form editing only `keys` of the record: it submits just those, so that
- * two forms on the same record never overwrite each other's fields.
+ * two forms on the same record never overwrite each other's fields. With a `success`
+ * message it saves on submit; without, shortly after each change and when it goes away.
  */
 function usePatientForm(
   initial: PatientInput,
   keys: (keyof PatientInput)[],
   onSubmit: Submit,
-  success: string,
+  success?: string,
 ) {
   const [form, setForm] = useState(initial);
-  const { busy, save, feedback } = useSave();
-  const set = (patch: Partial<PatientInput>) => setForm({ ...form, ...patch });
+  const { busy, save, setMessage, feedback } = useSave();
+  const [saveState, setSaveState] = useState<"saving" | "saved" | null>(null);
+  /** Fields changed and not saved yet. */
+  const pending = useRef<Partial<PatientInput> | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const patchOf = (f: PatientInput): Partial<PatientInput> =>
+    Object.fromEntries(keys.map((k) => [k, f[k]]));
+
+  function flush() {
+    clearTimeout(timer.current);
+    const patch = pending.current;
+    if (!patch) return;
+    pending.current = null;
+    // The form keeps what is typed: no normalized value comes back mid-typing.
+    onSubmit(patch).then(
+      () => {
+        setMessage(null);
+        if (!pending.current) setSaveState("saved");
+      },
+      (e: unknown) => {
+        setMessage({ text: errorMessage(e), error: true });
+        setSaveState(null);
+      },
+    );
+  }
+
+  // A change still waiting when the form goes away is saved all the same.
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
+  useEffect(() => () => flushRef.current(), []);
+
+  const set = (patch: Partial<PatientInput>) => {
+    const next = { ...form, ...patch };
+    setForm(next);
+    if (success) return;
+    pending.current = patchOf(next);
+    setSaveState("saving");
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => flushRef.current(), AUTOSAVE_MS);
+  };
 
   function fields(list: Field[]) {
     return list.map(({ key, label, multiline, rows = 2 }) => (
@@ -95,15 +138,25 @@ function usePatientForm(
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const patch = Object.fromEntries(keys.map((k) => [k, form[k]]));
+    if (!success) return flush();
     // The backend returns the normalized record (trimmed fields).
-    await save(async () => setForm(await onSubmit(patch)), success);
+    await save(async () => setForm(await onSubmit(patchOf(form))), success);
   }
 
-  return { form, set, fields, submit, busy, feedback };
+  const status = (
+    <>
+      {saveState && (
+        <span className="save-state" role="status">
+          {saveState === "saving" ? "Enregistrement…" : "Enregistré"}
+        </span>
+      )}
+      {feedback}
+    </>
+  );
+  return { form, set, fields, submit, busy, status };
 }
 
-/** Civil details and legal guardians. */
+/** Civil details and legal guardians; saved automatically without `submitLabel`. */
 export function IdentityForm({
   initial,
   isMinor,
@@ -113,14 +166,14 @@ export function IdentityForm({
   initial: PatientInput;
   /** From the saved record; the section also opens when guardians exist. */
   isMinor: boolean;
-  submitLabel: string;
+  submitLabel?: string;
   onSubmit: Submit;
 }) {
-  const { form, set, fields, submit, busy, feedback } = usePatientForm(
+  const { form, set, fields, submit, busy, status } = usePatientForm(
     initial,
     IDENTITY_KEYS,
     onSubmit,
-    "Fiche enregistrée.",
+    submitLabel && "Fiche enregistrée.",
   );
   const setGuardian = (i: number, patch: Partial<Guardian>) =>
     set({
@@ -227,15 +280,17 @@ export function IdentityForm({
           />
         </label>
       </details>
-      {feedback}
-      <button type="submit" disabled={busy}>
-        {submitLabel}
-      </button>
+      {status}
+      {submitLabel && (
+        <button type="submit" disabled={busy}>
+          {submitLabel}
+        </button>
+      )}
     </form>
   );
 }
 
-/** Medical history and review of systems, always editable during a consultation. */
+/** Medical history and review of systems, always editable and saved automatically. */
 export function ClinicalNotesForm({
   initial,
   onSubmit,
@@ -243,11 +298,10 @@ export function ClinicalNotesForm({
   initial: PatientInput;
   onSubmit: Submit;
 }) {
-  const { fields, submit, busy, feedback } = usePatientForm(
+  const { fields, submit, status } = usePatientForm(
     initial,
     CLINICAL_KEYS,
     onSubmit,
-    "Notes enregistrées.",
   );
   return (
     <form
@@ -257,10 +311,7 @@ export function ClinicalNotesForm({
     >
       <h3>Infos patient</h3>
       {fields(CLINICAL)}
-      {feedback}
-      <button type="submit" disabled={busy}>
-        Enregistrer les notes
-      </button>
+      {status}
     </form>
   );
 }

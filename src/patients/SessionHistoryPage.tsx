@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { RecentSession } from "../dashboard/api";
 import { currentPeriod } from "../invoices/filters";
 import { formatEuros } from "../money";
+import { usePaging } from "../paging";
 import {
   formatSessionDate,
   SESSION_STATUSES,
@@ -57,6 +58,7 @@ export function SessionHistoryPage({
 }) {
   const [sessions, setSessions] = useState<RecentSession[] | null>(null);
   const [filters, setFilters] = useState(NO_FILTERS);
+  const page = usePaging();
 
   useEffect(() => {
     void sessionsApi.listAll().then(setSessions);
@@ -64,6 +66,7 @@ export function SessionHistoryPage({
 
   if (!sessions) return null;
   const shown = filterSessions(sessions, filters);
+  const [rows, more] = page(shown);
   const locations = [...new Set(sessions.map((s) => s.location_name))].sort();
   const set = (patch: Partial<Filters>) => setFilters({ ...filters, ...patch });
 
@@ -165,7 +168,7 @@ export function SessionHistoryPage({
               </tr>
             </thead>
             <tbody>
-              {shown.map((s) => (
+              {rows.map((s) => (
                 <tr key={s.session_id}>
                   <td>
                     <button
@@ -189,6 +192,7 @@ export function SessionHistoryPage({
               ))}
             </tbody>
           </table>
+          {more}
         </div>
       )}
     </section>
