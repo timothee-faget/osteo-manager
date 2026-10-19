@@ -606,12 +606,12 @@ mod tests {
         let edited = update_location(
             &c,
             shared.id,
-            &location_input("Cabinet Clara", LocationKind::Practice, 2500),
+            &location_input("Cabinet des Tilleuls", LocationKind::Practice, 2500),
         )
         .unwrap();
         assert_eq!(
             (edited.name.as_str(), edited.retrocession_rate_bp),
-            ("Cabinet Clara", 2500)
+            ("Cabinet des Tilleuls", 2500)
         );
 
         set_location_archived(&c, own.id, true).unwrap();
@@ -623,7 +623,7 @@ mod tests {
         assert_eq!(
             names,
             [
-                ("Cabinet Clara".to_string(), false),
+                ("Cabinet des Tilleuls".to_string(), false),
                 ("Domicile".to_string(), false),
                 ("Cabinet".to_string(), true),
             ]

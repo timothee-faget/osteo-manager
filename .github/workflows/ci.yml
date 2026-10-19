@@ -1,9 +1,16 @@
 name: CI
 
+# PRs only: a squash-merge to main contains exactly what the PR's CI already checked.
 on:
   pull_request:
-  push:
-    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - ".claude/**"
+      - ".vscode/**"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   frontend:

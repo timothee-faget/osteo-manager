@@ -266,7 +266,7 @@ test("rétrocession du mois enregistrée en dépense", async () => {
     s.retrocessions = [
       {
         location_id: 2,
-        location_name: "Cabinet Clara",
+        location_name: "Cabinet des Tilleuls",
         month: "2026-09",
         receipts_cents: 120000,
         rate_bp: 3000,
@@ -275,7 +275,7 @@ test("rétrocession du mois enregistrée en dépense", async () => {
       },
       {
         location_id: 2,
-        location_name: "Cabinet Clara",
+        location_name: "Cabinet des Tilleuls",
         month: "2026-08",
         receipts_cents: 100000,
         rate_bp: 3000,
@@ -318,7 +318,7 @@ test("rétrocession du mois enregistrée en dépense", async () => {
     },
   });
   expect(state.expenses[0]).toMatchObject({
-    supplier: "Cabinet Clara",
+    supplier: "Cabinet des Tilleuls",
     category: "retrocession",
   });
 

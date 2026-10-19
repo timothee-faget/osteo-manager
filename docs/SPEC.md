@@ -150,6 +150,6 @@ Plusieurs années de données. Les formats sont décrits dans [legacy-data.md](l
 ## 6. Questions ouvertes
 
 - [x] OS : **macOS**, sans signature Apple (contournement de Gatekeeper au premier lancement).
-- [x] Releases : binaires publiés dans un **repo public dédié**, le code reste privé.
+- [x] Releases : binaires publiés dans un **repo public dédié**. Le code est public lui aussi depuis le 19/10/2026 (minutes Actions gratuites) : aucune donnée réelle dans le dépôt.
 - [x] Fiches et Excel : structure analysée, voir [legacy-data.md](legacy-data.md).
 - [x] Moteur de génération PDF : `krilla` (Rust), police Inter embarquée.

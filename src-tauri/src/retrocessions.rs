@@ -231,7 +231,7 @@ mod tests {
         settings::create_location(
             &f.conn,
             &LocationInput {
-                name: "Cabinet Clara".into(),
+                name: "Cabinet des Tilleuls".into(),
                 kind: LocationKind::Practice,
                 address: "4 rue Haute".into(),
                 retrocession_rate_bp: 3000,
@@ -291,7 +291,7 @@ mod tests {
         assert_eq!(rows, [("2026-11", 6000, 1800), ("2026-10", 11500, 3450)]);
         assert_eq!(
             (m[0].location_name.as_str(), m[0].rate_bp, &m[0].paid),
-            ("Cabinet Clara", 3000, &None)
+            ("Cabinet des Tilleuls", 3000, &None)
         );
         assert_eq!(due(3333, 3000), 1000);
     }
@@ -311,7 +311,11 @@ mod tests {
                 e.data.label.as_str(),
                 e.data.category.as_str()
             ),
-            ("Cabinet Clara", "Rétrocession octobre 2026", RETROCESSION)
+            (
+                "Cabinet des Tilleuls",
+                "Rétrocession octobre 2026",
+                RETROCESSION
+            )
         );
         let m = months(&f.conn).unwrap();
         assert_eq!(

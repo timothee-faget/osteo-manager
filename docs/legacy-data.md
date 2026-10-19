@@ -23,7 +23,7 @@ Un classeur par année, avec des macros VBA.
 | Montant     | nombre                                     | 60 € la plupart du temps                                 |
 | Règlement   | `Espèces` / `Chèque` / `Virement` / `Wero` |                                                          |
 | Impression  | 0 / 1                                      | facture imprimée ou remise                               |
-| Cabinet     | liste (`Clara`, `Autre`)                   | lieu, qui détermine le taux de rétrocession (0 % / 30 %) |
+| Cabinet     | liste (nom du cabinet, `Autre`)            | lieu, qui détermine le taux de rétrocession (0 % / 30 %) |
 
 ### Feuille `Facture`
 
