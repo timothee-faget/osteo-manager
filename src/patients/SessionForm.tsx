@@ -193,6 +193,8 @@ export function SessionForm({
   }
   if (!draft) return null;
   const set = (patch: Partial<Draft>) => change({ ...draft, ...patch });
+  // `starts_at` is "YYYY-MM-DDTHH:MM", edited as two fields.
+  const [date, time = ""] = draft.starts_at.split("T");
 
   return (
     <div className="session-form">
@@ -221,40 +223,52 @@ export function SessionForm({
             Séance facturée : seuls le motif et les notes restent modifiables.
           </p>
         )}
-        <label>
-          Date et heure
-          <input
-            type="datetime-local"
-            disabled={invoiced}
-            value={draft.starts_at}
-            onChange={(e) => set({ starts_at: e.target.value })}
-          />
-        </label>
-        <label>
-          Lieu
-          <select
-            disabled={invoiced}
-            value={draft.location_id}
-            onChange={(e) => void changeLocation(Number(e.target.value))}
-          >
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Motif
-          <input
-            value={draft.reason}
-            onChange={(e) => set({ reason: e.target.value })}
-          />
-        </label>
+        <div className="session-form-row">
+          <label>
+            Date
+            <input
+              type="date"
+              disabled={invoiced}
+              value={date}
+              onChange={(e) => set({ starts_at: `${e.target.value}T${time}` })}
+            />
+          </label>
+          <label>
+            Heure
+            <input
+              type="time"
+              step={300}
+              disabled={invoiced}
+              value={time}
+              onChange={(e) => set({ starts_at: `${date}T${e.target.value}` })}
+            />
+          </label>
+          <label>
+            Lieu
+            <select
+              disabled={invoiced}
+              value={draft.location_id}
+              onChange={(e) => void changeLocation(Number(e.target.value))}
+            >
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="session-reason">
+            Motif
+            <input
+              value={draft.reason}
+              onChange={(e) => set({ reason: e.target.value })}
+            />
+          </label>
+        </div>
         <label>
           Notes
           <textarea
-            rows={12}
+            rows={8}
             value={draft.notes}
             onChange={(e) => set({ notes: e.target.value })}
           />

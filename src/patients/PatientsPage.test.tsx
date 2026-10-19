@@ -86,7 +86,7 @@ test("le nom est obligatoire", async () => {
 test("notes patient éditables en consultation", async () => {
   const { user, state } = await setup();
   await createPatient(user, "Dupont", "Anne");
-  const notes = within(screen.getByRole("form", { name: "Notes patient" }));
+  const notes = within(screen.getByRole("form", { name: "Infos patient" }));
   const history = notes.getByLabelText("Antécédents et revue des systèmes");
   // A new record starts with the headings.
   expect(history).toHaveValue("Antécédents\nMédicaux :");
@@ -115,7 +115,7 @@ test("modifier la fiche met à jour le bandeau sans toucher aux notes", async ()
   ).not.toBeInTheDocument();
 
   // Notes typed but not saved yet must survive an identity save, and vice versa.
-  const notes = within(screen.getByRole("form", { name: "Notes patient" }));
+  const notes = within(screen.getByRole("form", { name: "Infos patient" }));
   await user.type(notes.getByLabelText("Contexte bio-psycho-social"), "Asthme");
   await user.click(
     notes.getByRole("button", { name: "Enregistrer les notes" }),

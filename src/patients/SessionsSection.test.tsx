@@ -112,8 +112,10 @@ test("tarif pré-rempli selon le lieu, séance enregistrée automatiquement", as
     s.getByLabelText("Notes"),
     "Ttt iliaque D{Enter}Revoir dans 3 semaines",
   );
-  await user.clear(s.getByLabelText("Date et heure"));
-  await user.type(s.getByLabelText("Date et heure"), "2026-10-16T09:30");
+  await user.clear(s.getByLabelText("Date"));
+  await user.type(s.getByLabelText("Date"), "2026-10-16");
+  await user.clear(s.getByLabelText("Heure"));
+  await user.type(s.getByLabelText("Heure"), "09:30");
   expect(s.getByRole("status")).toHaveTextContent("Enregistrement…");
   expect(
     s.queryByRole("button", { name: "Enregistrer" }),
@@ -164,7 +166,8 @@ test("valider émet la facture après confirmation et verrouille la facturation"
   expect(state.sessions[0].validated_at).not.toBeNull();
 
   // The session stays open, locked for billing, with the payment form.
-  expect(await s.findByLabelText("Date et heure")).toBeDisabled();
+  expect(await s.findByLabelText("Date")).toBeDisabled();
+  expect(s.getByLabelText("Heure")).toBeDisabled();
   expect(s.getByLabelText("Lieu")).toBeDisabled();
   expect(s.queryByLabelText("Tarif")).not.toBeInTheDocument();
   expect(s.getByText("Tarif : 60,00 €")).toBeInTheDocument();

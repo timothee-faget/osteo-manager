@@ -239,9 +239,8 @@ test("« Ouvrir » ouvre la séance dans la fiche du patient", async () => {
     await screen.findByRole("heading", { name: "DUPONT Anne" }),
   ).toBeInTheDocument();
   expect(await screen.findByLabelText("Motif")).toHaveValue("Lombalgie");
-  expect(screen.getByLabelText("Date et heure")).toHaveValue(
-    "2026-10-14T09:00",
-  );
+  expect(screen.getByLabelText("Date")).toHaveValue("2026-10-14");
+  expect(screen.getByLabelText("Heure")).toHaveValue("09:00");
 });
 
 test("dernières séances avec leur statut", async () => {
