@@ -251,11 +251,11 @@ export function ClinicalNotesForm({
   );
   return (
     <form
-      className="patient-form"
-      aria-label="Notes patient"
+      className="patient-form clinical-notes"
+      aria-label="Infos patient"
       onSubmit={(e) => void submit(e)}
     >
-      <h3>Notes patient</h3>
+      <h3>Infos patient</h3>
       {fields(CLINICAL)}
       {feedback}
       <button type="submit" disabled={busy}>

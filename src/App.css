@@ -862,10 +862,38 @@ form.confirm > button {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  margin-bottom: 0;
+}
+
+/* A compact close button keeps the title line tight. */
+.session-form-head button.icon-button {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
 }
 
 .session-form-head h4 {
   flex: 1;
+  margin: 0;
+}
+
+/* In the patient's session card, the form follows the heading closely. */
+.card .session-form {
+  margin-top: 0;
+}
+
+/* Date, time, location and reason on one line, wrapping on narrow windows. */
+.session-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.session-form-row > label {
+  flex: 0 1 auto;
+}
+
+.session-form-row > .session-reason {
+  flex: 1 1 12rem;
 }
 
 .save-state {
@@ -1456,6 +1484,15 @@ col.col-amount {
 
 .patient-form {
   gap: var(--space-5);
+}
+
+/* The patient info card: its fields start right under the heading. */
+.patient-form.clinical-notes {
+  gap: var(--space-4);
+}
+
+.patient-form.clinical-notes > h3 {
+  margin: 0;
 }
 
 .fields {
