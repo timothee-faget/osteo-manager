@@ -1,6 +1,6 @@
 # Publier une version
 
-Le code reste dans ce dépôt privé ; les binaires sont publiés dans le dépôt public
+Le code est dans ce dépôt ; les binaires sont publiés dans le dépôt séparé
 [`osteo-manager-releases`](https://github.com/timothee-faget/osteo-manager-releases),
 que l'app interroge pour ses mises à jour (`latest.json`).
 
@@ -11,7 +11,7 @@ que l'app interroge pour ses mises à jour (`latest.json`).
    ```sh
    git tag v0.2.0 && git push origin v0.2.0
    ```
-3. Le workflow `Release` (macOS, binaire universel Apple Silicon + Intel) publie le `.dmg`, l'archive de mise à jour signée et `latest.json`. Compter ~15 min ; les minutes macOS comptent ×10 dans le quota Actions d'un dépôt privé.
+3. Le workflow `Release` (macOS, binaire universel Apple Silicon + Intel) publie le `.dmg`, l'archive de mise à jour signée et `latest.json`. Compter ~15 min.
 
 Une fois publiée, une version est « latest » immédiatement : toutes les installations la proposeront au prochain lancement.
 

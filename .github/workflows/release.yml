@@ -1,7 +1,7 @@
 name: Release
 
 # Builds the macOS app on a `v*` tag and publishes it, with the signed updater
-# artifacts and latest.json, to the public releases repo (this repo stays private).
+# artifacts and latest.json, to the separate public releases repo the app checks for updates.
 
 on:
   push:

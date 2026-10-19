@@ -5,6 +5,7 @@ Spec complète : @docs/SPEC.md
 
 ## Règles non négociables
 
+- **Dépôt public** : code, historique, issues et PR sont visibles de tous.
 - **Données de santé** : ne jamais committer, logger ni mettre dans un test des données réelles de patients. Fixtures = données fictives uniquement. Ne pas lire les fichiers dans `private/` (données réelles).
 - **Analyser des données réelles** (Excel, Word dans `private/`) : uniquement via des scripts locaux qui passent le contenu à Ollama (`gemma4:e4b`) avec des consignes d'anonymisation. N'afficher que la structure, jamais les valeurs brutes.
 - **Factures immuables** : une facture émise ne se modifie ni ne se supprime ; correction par avoir. Numérotation continue sans trou, attribuée dans une transaction.
