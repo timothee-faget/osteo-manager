@@ -83,10 +83,13 @@ test("le nom est obligatoire", async () => {
   expect(state.patients).toHaveLength(0);
 });
 
-test("notes patient éditables en consultation", async () => {
+test("notes patient enregistrées automatiquement", async () => {
   const { user, state } = await setup();
   await createPatient(user, "Dupont", "Anne");
   const notes = within(screen.getByRole("form", { name: "Infos patient" }));
+  expect(
+    notes.queryByRole("button", { name: /Enregistrer/ }),
+  ).not.toBeInTheDocument();
   const history = notes.getByLabelText("Antécédents et revue des systèmes");
   // A new record starts with the headings.
   expect(history).toHaveValue("Antécédents\nMédicaux :");
@@ -95,16 +98,23 @@ test("notes patient éditables en consultation", async () => {
     notes.getByLabelText("Contexte bio-psycho-social"),
     "Deux enfants",
   );
-  await user.click(
-    notes.getByRole("button", { name: "Enregistrer les notes" }),
-  );
-  expect(await notes.findByRole("status")).toHaveTextContent(
-    "Notes enregistrées.",
-  );
+  expect(
+    await notes.findByText("Enregistré", {}, { timeout: 3000 }),
+  ).toBeInTheDocument();
   expect(state.patients[0]).toMatchObject({
     clinical_history: "Antécédents\nMédicaux : Asthme",
     bps_context: "Deux enfants",
   });
+});
+
+test("les notes en cours sont enregistrées en quittant la fiche", async () => {
+  const { user, state } = await setup();
+  await createPatient(user, "Dupont", "Anne");
+  const notes = within(screen.getByRole("form", { name: "Infos patient" }));
+  await user.type(notes.getByLabelText("Contexte bio-psycho-social"), "Asthme");
+  // Leave right away, before the autosave delay.
+  await user.click(screen.getByRole("button", { name: "Factures" }));
+  await vi.waitFor(() => expect(state.patients[0].bps_context).toBe("Asthme"));
 });
 
 test("modifier la fiche met à jour le bandeau sans toucher aux notes", async () => {
@@ -114,28 +124,25 @@ test("modifier la fiche met à jour le bandeau sans toucher aux notes", async ()
     screen.queryByRole("form", { name: "Identification" }),
   ).not.toBeInTheDocument();
 
-  // Notes typed but not saved yet must survive an identity save, and vice versa.
+  // Notes and identity saved close together must not overwrite each other.
   const notes = within(screen.getByRole("form", { name: "Infos patient" }));
   await user.type(notes.getByLabelText("Contexte bio-psycho-social"), "Asthme");
-  await user.click(
-    notes.getByRole("button", { name: "Enregistrer les notes" }),
-  );
-  await notes.findByRole("status");
-
   await user.click(screen.getByRole("button", { name: "Modifier la fiche" }));
   const identity = within(screen.getByRole("form", { name: "Identification" }));
+  expect(
+    identity.queryByRole("button", { name: /Enregistrer/ }),
+  ).not.toBeInTheDocument();
   await user.type(identity.getByLabelText("Téléphone"), "06 00 00 00 00");
-  await user.click(
-    identity.getByRole("button", { name: "Enregistrer la fiche" }),
+  expect(
+    await identity.findByText("Enregistré", {}, { timeout: 3000 }),
+  ).toBeInTheDocument();
+  expect(await screen.findByText("06 00 00 00 00")).toBeInTheDocument();
+  await vi.waitFor(() =>
+    expect(state.patients[0]).toMatchObject({
+      phone: "06 00 00 00 00",
+      bps_context: "Asthme",
+    }),
   );
-  expect(await identity.findByRole("status")).toHaveTextContent(
-    "Fiche enregistrée.",
-  );
-  expect(screen.getByText("06 00 00 00 00")).toBeInTheDocument();
-  expect(state.patients[0]).toMatchObject({
-    phone: "06 00 00 00 00",
-    bps_context: "Asthme",
-  });
 });
 
 test("recherche insensible aux accents", async () => {
@@ -178,17 +185,17 @@ test("patient mineur : badge et représentants légaux", async () => {
     screen.getByLabelText("Autorisation des représentants obtenue le"),
     "2026-10-01",
   );
-  await user.click(
-    screen.getByRole("button", { name: "Enregistrer la fiche" }),
-  );
-  await screen.findByRole("status");
+  expect(
+    await screen.findByText(
+      "Représentant : Julie Petit (mère)",
+      {},
+      { timeout: 3000 },
+    ),
+  ).toBeInTheDocument();
   expect(state.patients[0].guardians).toEqual([
     { name: "Julie Petit", relationship: "mère", phone: "", email: "" },
   ]);
   expect(state.patients[0].guardian_consent_date).toBe("2026-10-01");
-  expect(
-    screen.getByText("Représentant : Julie Petit (mère)"),
-  ).toBeInTheDocument();
 });
 
 test("export RGPD dans le dossier choisi", async () => {

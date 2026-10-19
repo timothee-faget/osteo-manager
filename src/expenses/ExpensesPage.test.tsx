@@ -119,10 +119,20 @@ test("modifier, voir le justificatif puis supprimer une dépense", async () => {
   });
 
   await user.click(screen.getByRole("button", { name: "Papeterie du Centre" }));
+  // The form opens above the list: it takes the focus.
+  expect(
+    screen.getByRole("heading", { name: "Modifier la dépense" }),
+  ).toHaveFocus();
   let f = form();
   await user.click(f.getByRole("button", { name: "Voir" }));
   expect(f.getByTitle("ticket.pdf")).toHaveAttribute("src", "blob:receipt");
+  // Removing the stored receipt asks first.
   await user.click(f.getByRole("button", { name: "Retirer" }));
+  await user.click(f.getByRole("button", { name: "Garder le justificatif" }));
+  expect(f.getByText("Justificatif : ticket.pdf")).toBeInTheDocument();
+  expect(calls("remove_expense_receipt")).toHaveLength(0);
+  await user.click(f.getByRole("button", { name: "Retirer" }));
+  await user.click(f.getByRole("button", { name: "Confirmer le retrait" }));
   expect(await f.findByText("Justificatif : aucun")).toBeInTheDocument();
 
   const amount = f.getByLabelText("Montant (€)");
@@ -256,6 +266,12 @@ test("créer puis arrêter une charge récurrente", async () => {
   });
 
   await user.click(within(row).getByRole("button", { name: "Arrêter" }));
+  await user.click(within(row).getByRole("button", { name: "Annuler" }));
+  expect(state.recurring[0].archived).toBe(false);
+  await user.click(within(row).getByRole("button", { name: "Arrêter" }));
+  await user.click(
+    within(row).getByRole("button", { name: "Confirmer l'arrêt" }),
+  );
   expect(
     await screen.findByText("Aucune charge récurrente."),
   ).toBeInTheDocument();

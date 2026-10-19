@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { errorMessage } from "../lock/api";
 import { centsToInput, parseEuros } from "../money";
 import { todayLocal } from "../invoices/paymentsApi";
@@ -109,8 +109,16 @@ export function ExpenseForm({
   const [receiptPath, setReceiptPath] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRemoveReceipt, setConfirmRemoveReceipt] = useState(false);
   const { busy, save, setMessage, feedback } = useSave();
   const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // Opens above the list, often out of view: bring it in and move the focus there.
+  useEffect(() => {
+    heading.current?.scrollIntoView({ block: "start" });
+    heading.current?.focus({ preventScroll: true });
+  }, []);
 
   // The decrypted content only lives in memory; release it when the preview closes.
   useEffect(() => {
@@ -173,7 +181,9 @@ export function ExpenseForm({
 
   return (
     <form className="expense-form" onSubmit={(e) => void submit(e)}>
-      <h3>{expense ? "Modifier la dépense" : "Nouvelle dépense"}</h3>
+      <h3 ref={heading} tabIndex={-1}>
+        {expense ? "Modifier la dépense" : "Nouvelle dépense"}
+      </h3>
       <label>
         Date de paiement
         <input
@@ -228,22 +238,41 @@ export function ExpenseForm({
           >
             {receiptName ? "Remplacer…" : "Choisir un fichier…"}
           </button>
-          {receiptName && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                expense
-                  ? void save(async () => {
+          {receiptName &&
+            (confirmRemoveReceipt && expense ? (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void save(async () => {
                       setExpense(await expensesApi.removeReceipt(expense.id));
                       setPreview(null);
+                      setConfirmRemoveReceipt(false);
                     }, "Justificatif retiré.")
-                  : setReceiptPath(null)
-              }
-            >
-              Retirer
-            </button>
-          )}
+                  }
+                >
+                  Confirmer le retrait
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemoveReceipt(false)}
+                >
+                  Garder le justificatif
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  // Only a stored receipt is lost: a chosen file is just unpicked.
+                  expense ? setConfirmRemoveReceipt(true) : setReceiptPath(null)
+                }
+              >
+                Retirer
+              </button>
+            ))}
         </span>
       </div>
       {preview && expense?.receipt && (

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../lock/api";
 import { formatEuros } from "../money";
+import { usePaging } from "../paging";
 import { BatchSend } from "../mail/BatchSend";
 import { InvoiceEmail } from "../mail/InvoiceEmail";
 import { mailApi, type Kind } from "../mail/api";
@@ -28,6 +29,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   const [filters, setFilters] = useState(NO_FILTERS);
   /** Invoices left out of the export; every invoice shown is in by default. */
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
+  const page = usePaging();
 
   const refresh = () => invoicesApi.list().then(setInvoices);
 
@@ -38,6 +40,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
   if (!invoices) return null;
   const current = invoices.find((i) => i.id === selected);
   const shown = filterInvoices(invoices, filters);
+  const [rows, more] = page(shown);
   const toggle = (id: number) => {
     const next = new Set(excluded);
     if (next.has(id)) next.delete(id);
@@ -116,7 +119,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((i) => (
+                  {rows.map((i) => (
                     <tr
                       key={i.id}
                       className={i.credit_note ? "archived" : undefined}
@@ -170,6 +173,7 @@ export function InvoicesPage({ openInvoiceId }: { openInvoiceId?: number }) {
                   ))}
                 </tbody>
               </table>
+              {more}
             </div>
           )}
         </>
@@ -324,6 +328,13 @@ function InvoiceDetail({
     error: boolean;
   } | null>(null);
   const cn = invoice.credit_note;
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // Opens above the list, often out of view: bring it in and move the focus there.
+  useEffect(() => {
+    heading.current?.scrollIntoView({ block: "start" });
+    heading.current?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -357,7 +368,7 @@ function InvoiceDetail({
   return (
     <div className="invoice-detail">
       <header>
-        <h3>
+        <h3 ref={heading} tabIndex={-1}>
           Facture {invoice.number} — {invoice.patient_name},{" "}
           {formatEuros(invoice.amount_cents)}
         </h3>
@@ -502,7 +513,7 @@ function InvoiceDetail({
             Émettre l'avoir
           </button>
           <button type="button" onClick={() => setCancelling(false)}>
-            Annuler
+            Garder la facture
           </button>
         </div>
       )}
