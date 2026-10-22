@@ -4,15 +4,17 @@
 use std::path::Path;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use calamine::{Data, Reader, open_workbook_auto};
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::Serialize;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::invoices;
 use crate::patients::CLINICAL_HISTORY_TEMPLATE;
-use crate::session::SessionError;
+use crate::session::{SessionError, State};
 
 type Result<T> = std::result::Result<T, SessionError>;
 
@@ -282,8 +284,223 @@ pub fn merge(workbooks: &[Parsed]) -> Vec<Merged> {
     merged
 }
 
+/// A cabinet of the "Infos cabinets" table of the `Facture` sheet.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cabinet {
+    pub name: String,
+    pub price_cents: Option<i64>,
+    /// Printed on the invoice; empty when the sheet has none.
+    pub address: String,
+}
+
+/// Reads the "Infos cabinets" table: the owner's name, the price, the address. The
+/// retrocession rates are not there (they are typed in the monthly formulas).
+pub fn parse_cabinets(path: &Path) -> Result<Vec<Cabinet>> {
+    let mut workbook = open_workbook_auto(path).map_err(|_| SessionError::Invalid("workbook"))?;
+    let Ok(range) = workbook.worksheet_range("Facture") else {
+        return Ok(Vec::new());
+    };
+    // The table has no fixed position: it starts under its "Proprio" heading, followed by the
+    // price and the address columns.
+    let Some((row, col)) = range
+        .used_cells()
+        .find(|(_, _, cell)| text(cell) == "Proprio")
+        .map(|(r, c, _)| (r, c))
+    else {
+        return Ok(Vec::new());
+    };
+    let mut cabinets = Vec::new();
+    for row in range.rows().skip(row + 1) {
+        let cell = |offset: usize| row.get(col + offset).unwrap_or(&Data::Empty);
+        let name = clean(&text(cell(0)));
+        if name.is_empty() {
+            break;
+        }
+        let address = clean(&text(cell(2)));
+        cabinets.push(Cabinet {
+            name,
+            price_cents: number_f(cell(1)).map(|p| (p * 100.0).round() as i64),
+            address: if address == "-" {
+                String::new()
+            } else {
+                address
+            },
+        });
+    }
+    Ok(cabinets)
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionView {
+    pub date: String,
+    pub number: u32,
+    pub patient: String,
+    pub amount_cents: Option<i64>,
+    pub method: Option<&'static str>,
+    pub cabinet: String,
+    /// `differs_*`, `no_cabinet` or `number_clash`.
+    pub issues: Vec<String>,
+    pub already_imported: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SkippedView {
+    pub file: String,
+    pub month: u32,
+    pub number: u32,
+    pub reason: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CabinetView {
+    /// Empty for the sessions that have none.
+    pub name: String,
+    pub sessions: u32,
+    pub address: String,
+    pub price_cents: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Preview {
+    pub sessions: Vec<SessionView>,
+    pub skipped: Vec<SkippedView>,
+    pub cabinets: Vec<CabinetView>,
+}
+
+impl Issue {
+    fn code(self) -> String {
+        match self {
+            Self::Differs(field) => format!("differs_{field:?}").to_lowercase(),
+            Self::NoCabinet => "no_cabinet".into(),
+            Self::NumberClash => "number_clash".into(),
+        }
+    }
+}
+
+struct Loaded {
+    sessions: Vec<Merged>,
+    skipped: Vec<SkippedView>,
+    cabinets: Vec<Cabinet>,
+}
+
+fn load(paths: &[PathBuf]) -> Result<Loaded> {
+    let mut parsed = Vec::new();
+    let mut skipped = Vec::new();
+    let mut cabinets: Vec<Cabinet> = Vec::new();
+    for path in paths {
+        let file = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let workbook = parse_sessions(path)?;
+        for s in &workbook.skipped {
+            skipped.push(SkippedView {
+                file: file.clone(),
+                month: s.month,
+                number: s.number,
+                reason: match s.reason {
+                    SkipReason::NoName => "no_name",
+                    SkipReason::OutOfPeriod => "out_of_period",
+                },
+            });
+        }
+        for cabinet in parse_cabinets(path)? {
+            match cabinets.iter_mut().find(|c| c.name == cabinet.name) {
+                Some(known) if known.address.is_empty() => known.address = cabinet.address,
+                Some(_) => {}
+                None => cabinets.push(cabinet),
+            }
+        }
+        parsed.push(workbook);
+    }
+    Ok(Loaded {
+        sessions: merge(&parsed),
+        skipped,
+        cabinets,
+    })
+}
+
+/// What importing `paths` would do, without writing anything.
+pub fn preview(conn: &Connection, paths: &[PathBuf]) -> Result<Preview> {
+    let loaded = load(paths)?;
+    let mut sessions = Vec::new();
+    for m in &loaded.sessions {
+        let r = &m.row;
+        let key = session_key(r);
+        let imported: Option<i64> = conn
+            .query_row("SELECT 1 FROM import_item WHERE key = ?1", [&key], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        sessions.push(SessionView {
+            date: r.date.format("%Y-%m-%d").to_string(),
+            number: r.number,
+            patient: format!("{} {}", r.last_name, r.first_name),
+            amount_cents: r.amount_cents,
+            method: r.method,
+            cabinet: r.cabinet.clone(),
+            issues: m.issues.iter().map(|i| i.code()).collect(),
+            already_imported: imported.is_some(),
+        });
+    }
+    let mut counts: HashMap<&str, u32> = HashMap::new();
+    for m in &loaded.sessions {
+        *counts.entry(m.row.cabinet.as_str()).or_insert(0) += 1;
+    }
+    let mut cabinets: Vec<CabinetView> = counts
+        .into_iter()
+        .map(|(name, sessions)| {
+            let info = loaded.cabinets.iter().find(|c| c.name == name);
+            CabinetView {
+                name: name.to_string(),
+                sessions,
+                address: info.map(|c| c.address.clone()).unwrap_or_default(),
+                price_cents: info.and_then(|c| c.price_cents),
+            }
+        })
+        .collect();
+    cabinets.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(Preview {
+        sessions,
+        skipped: loaded.skipped,
+        cabinets,
+    })
+}
+
+/// Imports the sessions of `paths`, once their cabinets are mapped to practice locations.
+pub fn import(
+    conn: &mut Connection,
+    paths: &[PathBuf],
+    locations: &HashMap<String, i64>,
+) -> Result<Report> {
+    let rows: Vec<SessionRow> = load(paths)?.sessions.into_iter().map(|m| m.row).collect();
+    apply(conn, &rows, locations)
+}
+
+#[tauri::command]
+pub fn import_preview(state: State, paths: Vec<PathBuf>) -> Result<Preview> {
+    preview(state.lock().unwrap().conn()?, &paths)
+}
+
+/// Backs up first when a backup folder is set; the import itself is all or nothing.
+#[tauri::command]
+pub fn import_workbooks(
+    state: State,
+    paths: Vec<PathBuf>,
+    locations: HashMap<String, i64>,
+) -> Result<Report> {
+    let mut session = state.lock().unwrap();
+    match session.backup_now(Local::now().naive_local()) {
+        Ok(()) | Err(SessionError::NoBackupFolder) => {}
+        Err(e) => return Err(e),
+    }
+    import(session.conn_mut()?, &paths, &locations)
+}
+
 /// Why a session was left out of an import.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Left {
     NoAmount,
     /// The cabinet has no practice location chosen for it.
@@ -292,13 +509,23 @@ pub enum Left {
     NumberTaken,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Serialize)]
 pub struct Report {
     pub imported: u32,
     /// Skipped because a previous import already created them.
     pub already_imported: u32,
     /// Month and number of the sessions left out.
     pub left_out: Vec<(u32, u32, Left)>,
+}
+
+/// Identifies a session across imports: the same date and patient.
+fn session_key(row: &SessionRow) -> String {
+    format!(
+        "{}|{}|{}",
+        row.date,
+        normalize(&row.last_name),
+        normalize(&row.first_name)
+    )
 }
 
 fn timestamp() -> String {
@@ -338,7 +565,7 @@ pub fn apply(
 
     for row in rows {
         let name = (normalize(&row.last_name), normalize(&row.first_name));
-        let key = format!("{}|{}|{}", row.date, name.0, name.1);
+        let key = session_key(row);
         let left = |left| (row.month, row.number, left);
 
         let imported: Option<i64> = tx
@@ -519,6 +746,14 @@ mod tests {
         }
         // A line holding only its number, as left at the end of the monthly template.
         sheet.write(17, 0, 7).unwrap();
+        let sheet = book.add_worksheet().set_name("Facture").unwrap();
+        sheet.write(7, 10, "Proprio").unwrap();
+        sheet.write(8, 10, "Cabinet A").unwrap();
+        sheet.write(8, 11, 60.0).unwrap();
+        sheet.write(8, 12, "1 rue des Lilas, Lyon").unwrap();
+        sheet.write(9, 10, "Autre").unwrap();
+        sheet.write(9, 11, 70.0).unwrap();
+        sheet.write(9, 12, "-").unwrap();
         let path = dir.join("Compta-2026.xlsx");
         book.save(&path).unwrap();
         path
@@ -772,6 +1007,59 @@ mod tests {
                 (3, 2, Left::UnknownCabinet),
                 (3, 3, Left::NumberTaken),
             ]
+        );
+    }
+
+    #[test]
+    fn reads_the_cabinets_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let cabinets = parse_cabinets(&workbook(dir.path())).unwrap();
+        assert_eq!(
+            cabinets,
+            [
+                Cabinet {
+                    name: "Cabinet A".into(),
+                    price_cents: Some(6000),
+                    address: "1 rue des Lilas, Lyon".into(),
+                },
+                Cabinet {
+                    name: "Autre".into(),
+                    price_cents: Some(7000),
+                    address: String::new(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn previews_without_writing_and_flags_what_was_imported() {
+        let mut f = crate::test_support::fixture();
+        let locations = fixture_locations(&f);
+        let dir = tempfile::tempdir().unwrap();
+        let paths = [workbook(dir.path())];
+
+        let before = preview(&f.conn, &paths).unwrap();
+        assert_eq!(before.sessions.len(), 4);
+        assert!(before.sessions.iter().all(|s| !s.already_imported));
+        assert_eq!(before.skipped.len(), 2);
+        let cabinet = &before.cabinets[0];
+        assert_eq!(
+            (cabinet.name.as_str(), cabinet.sessions, cabinet.price_cents),
+            ("Cabinet A", 4, Some(6000))
+        );
+        let patients: i64 = f
+            .conn
+            .query_row("SELECT count(*) FROM patient", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(patients, 1);
+
+        let report = import(&mut f.conn, &paths, &locations).unwrap();
+        assert_eq!(report.imported, 3);
+        assert_eq!(report.left_out, [(2, 4, Left::NoAmount)]);
+        let after = preview(&f.conn, &paths).unwrap();
+        assert_eq!(
+            after.sessions.iter().filter(|s| s.already_imported).count(),
+            3
         );
     }
 }
