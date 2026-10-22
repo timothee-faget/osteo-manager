@@ -6,6 +6,7 @@ pub mod dashboard;
 pub mod db;
 pub mod expenses;
 pub mod fixed_assets;
+pub mod import;
 pub mod invoices;
 pub mod mail;
 pub mod patients;
