@@ -1,4 +1,5 @@
 import { BackupSettings } from "../backup/BackupSettings";
+import { ImportSettings } from "../importer/ImportSettings";
 import { MailSettings, TemplateForm } from "../mail/MailSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AutoLockSettings } from "./AutoLockSettings";
@@ -78,6 +79,13 @@ export function SettingsPage({
           hint="Dossier de sauvegarde et restauration"
         >
           <BackupSettings onRestored={onRestored} />
+        </Fold>
+        <Fold
+          sub
+          title="Import"
+          hint="Reprendre les anciens classeurs de comptabilité"
+        >
+          <ImportSettings />
         </Fold>
       </Fold>
     </div>

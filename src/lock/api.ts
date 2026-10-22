@@ -61,6 +61,7 @@ const MESSAGES: Record<string, string> = {
     "Cette facture a des paiements : supprimez-les d'abord, puis ressaisissez-les sur la facture corrigée.",
   invalid_invoice_paid: "Cette facture est réglée : pas de relance à envoyer.",
   invalid_credit_note: "Avoir introuvable.",
+  invalid_workbook: "Ce fichier n'est pas un classeur Excel lisible.",
   invalid_payment_amount: "Le montant doit être supérieur à zéro.",
   invalid_payment_amount_format:
     "Montant invalide : saisissez un montant, par exemple 60 ou 60,50.",
