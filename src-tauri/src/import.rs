@@ -400,7 +400,7 @@ pub enum Field {
 }
 
 /// Lowercase, without accents or punctuation: "Hélène-Marie" and "helene marie" match.
-fn normalize(value: &str) -> String {
+pub(crate) fn normalize(value: &str) -> String {
     value
         .nfd()
         .filter(|c| c.is_alphanumeric())
@@ -853,20 +853,44 @@ pub fn apply(
         };
 
         let day = row.date.format("%Y-%m-%d").to_string();
-        tx.execute(
-            "INSERT INTO session (patient_id, location_id, starts_at, reason, notes, fee_cents,
-                validated_at, created_at, updated_at)
-             VALUES (?1, ?2, ?3, '', '', ?4, ?5, ?6, ?6)",
-            params![
-                patient_id,
-                location_id,
-                format!("{day}T00:00"),
-                amount,
-                day,
-                timestamp()
-            ],
-        )?;
-        let session_id = tx.last_insert_rowid();
+        // A patient file may have created this session already, free of charge: it becomes
+        // the billed one and keeps its notes.
+        let free: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM session WHERE patient_id = ?1 AND free_of_charge = 1
+                    AND substr(starts_at, 1, 10) = ?2
+                    AND NOT EXISTS (SELECT 1 FROM invoice WHERE session_id = session.id)
+                 ORDER BY id LIMIT 1",
+                params![patient_id, day],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let session_id = match free {
+            Some(id) => {
+                tx.execute(
+                    "UPDATE session SET location_id = ?2, fee_cents = ?3, free_of_charge = 0,
+                        validated_at = ?4, updated_at = ?5 WHERE id = ?1",
+                    params![id, location_id, amount, day, timestamp()],
+                )?;
+                id
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO session (patient_id, location_id, starts_at, reason, notes,
+                        fee_cents, validated_at, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, '', '', ?4, ?5, ?6, ?6)",
+                    params![
+                        patient_id,
+                        location_id,
+                        format!("{day}T00:00"),
+                        amount,
+                        day,
+                        timestamp()
+                    ],
+                )?;
+                tx.last_insert_rowid()
+            }
+        };
         let invoice = invoices::issue_historical(&tx, session_id, row.date, row.number)?;
         tx.execute(
             "INSERT INTO invoice_sending (invoice_id, sent_at) VALUES (?1, ?2)",
@@ -1236,6 +1260,46 @@ mod tests {
             .query_row("SELECT count(*) FROM invoice", [], |r| r.get(0))
             .unwrap();
         assert_eq!(invoices, 2);
+    }
+
+    #[test]
+    fn adopts_the_free_session_a_patient_file_created() {
+        let mut f = crate::test_support::fixture();
+        let locations = fixture_locations(&f);
+        // The same day as the row, plus another day that must stay free.
+        let free = f.free_session("2026-03-02T00:00");
+        let other = f.free_session("2026-03-09T00:00");
+        let report = apply(&mut f.conn, &[row(2, 1, "DUPONT", "anne")], &[], &locations).unwrap();
+        assert_eq!(report.imported, 1);
+
+        let sessions: i64 = f
+            .conn
+            .query_row("SELECT count(*) FROM session", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(sessions, 2, "no second session for the same day");
+        let (free_of_charge, fee, notes, invoiced): (bool, i64, String, bool) = f
+            .conn
+            .query_row(
+                "SELECT free_of_charge, fee_cents, notes,
+                    EXISTS (SELECT 1 FROM invoice WHERE session_id = session.id)
+                 FROM session WHERE id = ?1",
+                [free.id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (free_of_charge, fee, notes.as_str(), invoiced),
+            (false, 6000, "Ttt iliaque D", true)
+        );
+        let still_free: bool = f
+            .conn
+            .query_row(
+                "SELECT free_of_charge FROM session WHERE id = ?1",
+                [other.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(still_free);
     }
 
     #[test]

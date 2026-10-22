@@ -7,6 +7,7 @@ pub mod db;
 pub mod expenses;
 pub mod fixed_assets;
 pub mod import;
+pub mod import_word;
 pub mod invoices;
 pub mod mail;
 pub mod patients;
@@ -143,6 +144,8 @@ pub fn run() {
             fixed_assets::delete_fixed_asset,
             import::import_preview,
             import::import_workbooks,
+            import_word::import_word_preview,
+            import_word::import_word_files,
             cheque_deposits::list_pending_cheques,
             cheque_deposits::list_cheque_deposits,
             cheque_deposits::list_deposit_cheques,

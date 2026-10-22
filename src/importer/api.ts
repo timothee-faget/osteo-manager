@@ -79,3 +79,58 @@ export const importApi = {
     return chosen ?? [];
   },
 };
+
+export type WordIssue =
+  | "name_unsure"
+  | "bad_birth_date"
+  | "birth_date_differs"
+  | "history_kept"
+  | "no_sessions"
+  | "odd_session_date";
+
+export type WordFiche = {
+  file: string;
+  patient: string;
+  /** The patient is already in the database. */
+  existing: boolean;
+  sessions: number;
+  /** Sessions that gain their reason and notes. */
+  filled: number;
+  /** Sessions that already have their notes. */
+  kept: number;
+  created: number;
+  issues: WordIssue[];
+};
+
+export type WordPreview = {
+  fiches: WordFiche[];
+  /** Free sessions that duplicate a billed one, to fold into it. */
+  merged: number;
+  /** Sessions with no match in the database, created free of charge. */
+  unmatched: { date: string; patient: string }[];
+  unreadable: { file: string }[];
+};
+
+export type WordReport = {
+  patients_created: number;
+  patients_completed: number;
+  sessions_filled: number;
+  sessions_kept: number;
+  sessions_created: number;
+  sessions_merged: number;
+};
+
+export const wordImportApi = {
+  preview: (folder: string) =>
+    invoke<WordPreview>("import_word_preview", { folder }),
+  run: (folder: string, locationId: number | null) =>
+    invoke<WordReport>("import_word_files", { folder, locationId }),
+  /** `null` if the user cancels. */
+  chooseFolder: async () => {
+    const chosen = await open({
+      title: "Dossier des fiches patients",
+      directory: true,
+    });
+    return chosen ?? null;
+  },
+};

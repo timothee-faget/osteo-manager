@@ -1,5 +1,6 @@
 import { BackupSettings } from "../backup/BackupSettings";
 import { ImportSettings } from "../importer/ImportSettings";
+import { ImportWordSettings } from "../importer/ImportWordSettings";
 import { MailSettings, TemplateForm } from "../mail/MailSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AutoLockSettings } from "./AutoLockSettings";
@@ -86,6 +87,13 @@ export function SettingsPage({
           hint="Reprendre les anciens classeurs de comptabilité"
         >
           <ImportSettings />
+        </Fold>
+        <Fold
+          sub
+          title="Import des fiches"
+          hint="Reprendre les fiches patients Word"
+        >
+          <ImportWordSettings />
         </Fold>
       </Fold>
     </div>
