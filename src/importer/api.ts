@@ -104,6 +104,8 @@ export type WordFiche = {
 
 export type WordPreview = {
   fiches: WordFiche[];
+  /** Free sessions that duplicate a billed one, to fold into it. */
+  merged: number;
   /** Sessions with no match in the database, created free of charge. */
   unmatched: { date: string; patient: string }[];
   unreadable: { file: string }[];
@@ -115,6 +117,7 @@ export type WordReport = {
   sessions_filled: number;
   sessions_kept: number;
   sessions_created: number;
+  sessions_merged: number;
 };
 
 export const wordImportApi = {

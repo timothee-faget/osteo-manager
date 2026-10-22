@@ -19,6 +19,7 @@ const fiche = {
 };
 
 const preview: WordPreview = {
+  merged: 3,
   fiches: [
     { ...fiche, patient: "MARTIN Jeanne" },
     {
@@ -60,6 +61,7 @@ function backend(previewed: WordPreview = preview) {
           sessions_filled: 1,
           sessions_kept: 2,
           sessions_created: 1,
+          sessions_merged: 3,
         });
       default:
         return Promise.reject(new Error(command));
@@ -90,6 +92,9 @@ test("l'aperçu résume l'import et liste ce qui est à vérifier", async () => 
   expect(screen.getByText(/1 nouveau patient/)).toBeInTheDocument();
   expect(screen.getByText(/cassé\.docx/)).toBeInTheDocument();
   expect(
+    screen.getByText(/3 séances gracieuses créées par un import précédent/),
+  ).toBeInTheDocument();
+  expect(
     screen.getByText("Séances absentes de la base (1)"),
   ).toBeInTheDocument();
   expect(
@@ -118,6 +123,9 @@ test("exige un lieu pour les séances à créer, puis importe", async () => {
     await screen.findByText(
       "1 séance complétée, 1 séance créée à titre gracieux, 2 déjà renseignées.",
     ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("3 doublons fusionnés dans la séance facturée."),
   ).toBeInTheDocument();
 });
 

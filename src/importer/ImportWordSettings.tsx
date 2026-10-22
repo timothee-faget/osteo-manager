@@ -103,6 +103,16 @@ export function ImportWordSettings() {
             compléter
             {kept > 0 && `, ${plural(kept, "déjà renseignée")}`}.
           </p>
+          {preview.merged > 0 && (
+            <p>
+              {plural(preview.merged, "séance gracieuse", "séances gracieuses")}{" "}
+              créée
+              {preview.merged > 1 ? "s" : ""} par un import précédent
+              {preview.merged > 1 ? " sont" : " est"} en double d'une séance
+              facturée du même jour : leurs notes seront reportées sur la séance
+              facturée, puis le doublon sera supprimé.
+            </p>
+          )}
           {preview.unreadable.length > 0 && (
             <p role="alert">
               {plural(
@@ -218,6 +228,16 @@ function Report({ report }: { report: WordReport }) {
           `, ${plural(report.sessions_kept, "déjà renseignée")}`}
         .
       </p>
+      {report.sessions_merged > 0 && (
+        <p>
+          {plural(
+            report.sessions_merged,
+            "doublon fusionné",
+            "doublons fusionnés",
+          )}{" "}
+          dans la séance facturée.
+        </p>
+      )}
     </div>
   );
 }

@@ -469,6 +469,8 @@ pub struct Unmatched {
 #[derive(Debug, Default, Serialize)]
 pub struct Preview {
     pub fiches: Vec<FicheView>,
+    /// Free sessions that duplicate a billed one, to fold into it.
+    pub merged: u32,
     pub unmatched: Vec<Unmatched>,
     pub unreadable: Vec<Unreadable>,
 }
@@ -479,6 +481,55 @@ fn display_name(f: &Fiche) -> String {
 
 fn timestamp() -> String {
     Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
+}
+
+/// A free session created from a file next to the billed session imported from the
+/// workbooks for the same patient and day is the same session: its notes move to the billed
+/// one and it is deleted. Left alone when the billed session already has other notes.
+fn merge_free_duplicates(tx: &Connection) -> Result<u32> {
+    let pairs: Vec<(i64, i64, String, String, String, String)> = tx
+        .prepare(
+            "SELECT f.id, b.id, f.reason, f.notes, b.reason, b.notes
+             FROM session f JOIN session b ON b.patient_id = f.patient_id
+                AND substr(b.starts_at, 1, 10) = substr(f.starts_at, 1, 10)
+             WHERE f.free_of_charge = 1 AND b.free_of_charge = 0
+                AND NOT EXISTS (SELECT 1 FROM invoice WHERE session_id = f.id)
+                AND EXISTS (SELECT 1 FROM invoice WHERE session_id = b.id)
+                AND EXISTS (SELECT 1 FROM import_item WHERE session_id = b.id)
+             ORDER BY f.id, b.id",
+        )?
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })?
+        .collect::<std::result::Result<_, _>>()?;
+    let mut merged = HashSet::new();
+    let mut taken = HashSet::new();
+    for (free, billed, reason, notes, billed_reason, billed_notes) in pairs {
+        if merged.contains(&free) || taken.contains(&billed) {
+            continue;
+        }
+        let same = billed_reason == reason && billed_notes == notes;
+        if !(same || billed_reason.is_empty() && billed_notes.is_empty()) {
+            continue;
+        }
+        if !same {
+            tx.execute(
+                "UPDATE session SET reason = ?2, notes = ?3, updated_at = ?4 WHERE id = ?1",
+                params![billed, reason, notes, timestamp()],
+            )?;
+        }
+        tx.execute("DELETE FROM session WHERE id = ?1", [free])?;
+        merged.insert(free);
+        taken.insert(billed);
+    }
+    Ok(merged.len() as u32)
 }
 
 /// Matches `fiches` with the database and, when `location` is given, writes: the patients
@@ -523,6 +574,8 @@ fn process(
             known.insert(key, patient);
         }
     }
+
+    report.sessions_merged = merge_free_duplicates(&tx)?;
 
     for fiche in fiches {
         let key = (normalize(&fiche.last_name), normalize(&fiche.first_name));
@@ -726,12 +779,15 @@ pub struct Report {
     pub sessions_kept: u32,
     /// Free of charge, without invoice.
     pub sessions_created: u32,
+    /// Free sessions folded into the billed session of the same day.
+    pub sessions_merged: u32,
 }
 
 /// What importing the files of `folder` would do, without writing anything.
 pub fn preview(conn: &mut Connection, folder: &Path) -> Result<Preview> {
     let (fiches, unreadable) = load(folder)?;
-    let (mut preview, _) = process(conn, &fiches, None, false)?;
+    let (mut preview, report) = process(conn, &fiches, None, false)?;
+    preview.merged = report.sessions_merged;
     preview.unreadable = unreadable;
     Ok(preview)
 }
@@ -1163,6 +1219,79 @@ mod tests {
             .query_row("SELECT count(*) FROM invoice", [], |r| r.get(0))
             .unwrap();
         assert_eq!(invoices, 0);
+    }
+
+    /// An Excel-imported session (billed, no notes) next to a free one with the file's notes.
+    fn duplicate_pair(f: &mut crate::test_support::Fixture) -> (i64, i64) {
+        let free = f.free_session("2026-03-02T00:00");
+        let billed = f.session("2026-03-02T09:00");
+        f.validate(billed.id, "2026-03-02").unwrap();
+        f.conn
+            .execute(
+                "UPDATE session SET reason = '', notes = '' WHERE id = ?1",
+                [billed.id],
+            )
+            .unwrap();
+        f.conn
+            .execute(
+                "INSERT INTO import_item (key, session_id, imported_at) VALUES ('k', ?1, '')",
+                [billed.id],
+            )
+            .unwrap();
+        (free.id, billed.id)
+    }
+
+    #[test]
+    fn merges_a_free_session_into_the_billed_one_of_the_same_day() {
+        let mut f = fixture();
+        let (free, billed) = duplicate_pair(&mut f);
+        let fiches = [dupont(vec![word_session(
+            "2026-03-02",
+            "Lombalgie",
+            "Ttt iliaque D",
+        )])];
+
+        let (_, report) = process(&mut f.conn, &fiches, Some(f.practice), true).unwrap();
+        assert_eq!(report.sessions_merged, 1);
+        assert_eq!(report.sessions_created, 0);
+        let ids: Vec<i64> = f
+            .conn
+            .prepare("SELECT id FROM session")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        assert_eq!(ids, [billed], "the free session {free} is gone");
+        let notes: String = f
+            .conn
+            .query_row("SELECT notes FROM session", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(notes, "Ttt iliaque D");
+        let invoices: i64 = f
+            .conn
+            .query_row("SELECT count(*) FROM invoice", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(invoices, 1);
+    }
+
+    #[test]
+    fn keeps_both_sessions_when_the_billed_one_has_other_notes() {
+        let mut f = fixture();
+        let (_, billed) = duplicate_pair(&mut f);
+        f.conn
+            .execute(
+                "UPDATE session SET notes = 'Écrit à la main' WHERE id = ?1",
+                [billed],
+            )
+            .unwrap();
+        let (_, report) = process(&mut f.conn, &[dupont(vec![])], None, true).unwrap();
+        assert_eq!(report.sessions_merged, 0);
+        let sessions: i64 = f
+            .conn
+            .query_row("SELECT count(*) FROM session", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(sessions, 2);
     }
 
     #[test]
