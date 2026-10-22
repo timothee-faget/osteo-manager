@@ -3020,6 +3020,7 @@ dependencies = [
  "keyring",
  "krilla",
  "lettre",
+ "quick-xml",
  "rusqlite",
  "rust_xlsxwriter",
  "serde",
@@ -3034,6 +3035,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "unicode-normalization",
+ "zip 9.0.5",
 ]
 
 [[package]]

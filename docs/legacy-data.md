@@ -76,6 +76,15 @@ Un fichier par patient, sur un modèle stable.
 
 ### Difficultés d'import
 
+Structure observée sur les fiches d'exemple (168 fichiers, sans tableau) :
+
+- La première ligne est « NOM Prénom » ; le nom est la suite de mots en capitales (ordre incertain si tout est en capitales ou en minuscules).
+- Les libellés sont `Date de naissance`, `Tel`, `Travail`, `SPORT`, `Médecin traitant`, puis `MED`, `CHIR`, `TRAUMA`, `Traitement`, `Contexte BPS`, `ORL`, `CARDIO PULMO`, `DIGESTIF`, `Gyneco`, `Hygiène de vie`. La valeur suit les deux-points, ou occupe les lignes suivantes.
+- Les séances commencent après un éventuel `BPS :` et le titre « MOTIF DE CONSULTATION » (parfois mal orthographié). Chaque séance s'ouvre par une ligne qui ne contient que sa date (`jj/mm/aa` ou `jj/mm/aaaa`) ; une date au milieu d'une phrase n'ouvre rien.
+- Après la date, une première ligne courte (60 caractères au plus) suivie d'autres lignes est le motif ; sinon tout est dans les notes.
+- La date de naissance est parfois mal saisie (`: 05/11/1990`, `1 5/11/1990`, année sur deux chiffres).
+- Quelques dates de séance sont fausses (année 2004, 2027, 2095…) : signalées à l'écran de vérification.
+
 - Les libellés sont stables, mais leur contenu est du texte libre : le découpage se fera par les libellés de section.
 - La séparation entre séances (par date) doit être vérifiée par une personne : un écran de validation est prévu.
 - Le rapprochement entre une fiche Word et le patient de l'Excel se fait par nom et prénom, avec la date de naissance quand elle existe.

@@ -39,3 +39,6 @@ graphify-out/
 *.log
 dist-ssr/
 *.local
+
+# Fiches patients d'exemple (données réelles)
+exemple_data/

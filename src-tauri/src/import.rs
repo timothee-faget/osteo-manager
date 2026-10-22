@@ -400,7 +400,7 @@ pub enum Field {
 }
 
 /// Lowercase, without accents or punctuation: "Hélène-Marie" and "helene marie" match.
-fn normalize(value: &str) -> String {
+pub(crate) fn normalize(value: &str) -> String {
     value
         .nfd()
         .filter(|c| c.is_alphanumeric())
