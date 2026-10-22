@@ -29,14 +29,32 @@ export type ImportCabinet = {
   price_cents: number | null;
 };
 
+export type ImportCharge = {
+  /** `YYYY-MM-DD`. */
+  date: string;
+  supplier: string;
+  amount_cents: number;
+  already_imported: boolean;
+};
+
+export type ImportIgnoredCharge = {
+  /** `YYYY-MM`. */
+  month: string;
+  label: string;
+  amount_cents: number;
+};
+
 export type ImportPreview = {
   sessions: ImportSession[];
   skipped: ImportSkipped[];
   cabinets: ImportCabinet[];
+  charges: ImportCharge[];
+  ignored_charges: ImportIgnoredCharge[];
 };
 
 export type ImportReport = {
   imported: number;
+  charges: number;
   already_imported: number;
   /** Month, number and why. */
   left_out: [

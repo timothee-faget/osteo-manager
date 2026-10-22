@@ -42,6 +42,15 @@ const preview: ImportPreview = {
     },
   ],
   skipped: [{ file: "a.xlsm", month: 5, number: 1, reason: "out_of_period" }],
+  charges: [
+    {
+      date: "2026-03-01",
+      supplier: "Loyer",
+      amount_cents: 50000,
+      already_imported: false,
+    },
+  ],
+  ignored_charges: [{ month: "2026-03", label: "spotify", amount_cents: 1112 }],
   cabinets: [
     { name: "Clara", sessions: 3, address: "1 rue X", price_cents: 6000 },
   ],
@@ -70,6 +79,7 @@ function backend() {
       case "import_workbooks":
         return Promise.resolve({
           imported: 2,
+          charges: 1,
           already_imported: 1,
           left_out: [[3, 2, "no_amount"]],
         });
@@ -105,6 +115,8 @@ test("l'aperçu signale ce qui est à vérifier et exige un lieu par cabinet", a
   expect(
     screen.getByText("Règlement différent selon les classeurs"),
   ).toBeInTheDocument();
+  expect(screen.getByText(/1 charge fixe à importer/)).toBeInTheDocument();
+  expect(screen.getByText(/03\/2026 : spotify/)).toBeInTheDocument();
   expect(screen.queryByText("Martin Jeanne")).not.toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Importer 2 séances" }),
@@ -123,7 +135,9 @@ test("importe avec le lieu choisi puis affiche le bilan", async () => {
     paths: ["/data/Compta-2026.xlsm"],
     locations: { Clara: 7 },
   });
-  expect(await screen.findByText("2 séances importées.")).toBeInTheDocument();
+  expect(
+    await screen.findByText("2 séances importées, 1 charge fixe."),
+  ).toBeInTheDocument();
   expect(
     screen.getByText("Mois 3, n° 2 : montant manquant"),
   ).toBeInTheDocument();

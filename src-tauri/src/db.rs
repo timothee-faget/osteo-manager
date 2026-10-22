@@ -415,6 +415,13 @@ Bien cordialement,
         session_id INTEGER NOT NULL REFERENCES session (id),
         imported_at TEXT NOT NULL
     ) STRICT;",
+    // v18: fixed charges imported from the legacy workbooks. No link to the expense, so
+    // deleting an imported expense does not bring it back at the next import.
+    "CREATE TABLE import_expense (
+        key TEXT PRIMARY KEY,
+        expense_id INTEGER NOT NULL,
+        imported_at TEXT NOT NULL
+    ) STRICT;",
 ];
 
 #[derive(Debug, thiserror::Error)]

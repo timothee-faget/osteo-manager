@@ -103,6 +103,7 @@ export function ImportSettings() {
   const mapped = cabinets.every((c) => choices[c.name]);
   const toCheck = todo.filter((s) => s.issues.length > 0);
   const unpaid = todo.filter((s) => !s.method).length;
+  const charges = preview?.charges.filter((c) => !c.already_imported) ?? [];
 
   return (
     <div className="import">
@@ -139,6 +140,17 @@ export function ImportSettings() {
               {summarize(preview.skipped.map((s) => SKIPPED[s.reason]))}.
             </p>
           )}
+
+          {charges.length > 0 && (
+            <p>
+              {charges.length} charge{charges.length > 1 ? "s" : ""} fixe
+              {charges.length > 1 ? "s" : ""} à importer (loyer, Doctolib,
+              assurance, téléphone, Indy), en dépenses payées par virement le 1
+              <sup>er</sup> du mois. Les cotisations sociales du classeur sont
+              des estimations : elles ne sont pas importées.
+            </p>
+          )}
+          {preview.ignored_charges.length > 0 && <Ignored preview={preview} />}
 
           {cabinets.length > 0 && (
             <>
@@ -193,7 +205,9 @@ export function ImportSettings() {
           <div className="actions">
             <button
               type="button"
-              disabled={busy || todo.length === 0 || !mapped}
+              disabled={
+                busy || (todo.length === 0 && charges.length === 0) || !mapped
+              }
               onClick={() => void run()}
             >
               {busy ? "Import…" : `Importer ${todo.length} séances`}
@@ -209,6 +223,27 @@ function summarize(reasons: string[]) {
   const counts = new Map<string, number>();
   for (const r of reasons) counts.set(r, (counts.get(r) ?? 0) + 1);
   return [...counts].map(([r, n]) => `${n} ${r}`).join(", ");
+}
+
+function Ignored({ preview }: { preview: ImportPreview }) {
+  return (
+    <details>
+      <summary>
+        {preview.ignored_charges.length} ligne
+        {preview.ignored_charges.length > 1 ? "s" : ""} de charges non reconnue
+        {preview.ignored_charges.length > 1 ? "s" : ""}
+      </summary>
+      <p>À saisir à la main dans Dépenses si elles comptent :</p>
+      <ul>
+        {preview.ignored_charges.map((c) => (
+          <li key={`${c.month}-${c.label}`}>
+            {c.month.slice(5)}/{c.month.slice(0, 4)} : {c.label} (
+            {formatEuros(c.amount_cents)})
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
 }
 
 function Check({ sessions }: { sessions: ImportSession[] }) {
@@ -248,7 +283,10 @@ function Report({ report }: { report: ImportReport }) {
     <div role="status">
       <p>
         {report.imported} séance{report.imported > 1 ? "s" : ""} importée
-        {report.imported > 1 ? "s" : ""}.
+        {report.imported > 1 ? "s" : ""}
+        {report.charges > 0 &&
+          `, ${report.charges} charge${report.charges > 1 ? "s" : ""} fixe${report.charges > 1 ? "s" : ""}`}
+        .
       </p>
       {report.left_out.length > 0 && (
         <>
