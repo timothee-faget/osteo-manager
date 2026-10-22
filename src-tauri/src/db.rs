@@ -409,6 +409,19 @@ Bien cordialement,
             OR NEW.validated_at IS NOT OLD.validated_at
             OR NEW.free_of_charge IS NOT OLD.free_of_charge)
         BEGIN SELECT RAISE(ABORT, 'invoiced session billing fields are locked'); END;",
+    // v17: sessions imported from the legacy workbooks, so that importing again skips them.
+    "CREATE TABLE import_item (
+        key TEXT PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES session (id),
+        imported_at TEXT NOT NULL
+    ) STRICT;",
+    // v18: fixed charges imported from the legacy workbooks. No link to the expense, so
+    // deleting an imported expense does not bring it back at the next import.
+    "CREATE TABLE import_expense (
+        key TEXT PRIMARY KEY,
+        expense_id INTEGER NOT NULL,
+        imported_at TEXT NOT NULL
+    ) STRICT;",
 ];
 
 #[derive(Debug, thiserror::Error)]

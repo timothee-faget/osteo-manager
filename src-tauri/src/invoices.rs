@@ -343,6 +343,26 @@ pub fn set_sent(conn: &Connection, invoice_id: i64, sent: bool) -> Result<Invoic
 /// Issues the invoice of `session_id`. Must run inside the caller's transaction, which
 /// also marks the session validated, so the number is never assigned twice or skipped.
 pub(crate) fn issue(conn: &Connection, session_id: i64, issued_on: NaiveDate) -> Result<Invoice> {
+    insert(conn, session_id, issued_on, None)
+}
+
+/// Issues an invoice that already exists on paper (legacy import) under its original
+/// sequence number. The caller makes sure the number is free.
+pub(crate) fn issue_historical(
+    conn: &Connection,
+    session_id: i64,
+    issued_on: NaiveDate,
+    seq: u32,
+) -> Result<Invoice> {
+    insert(conn, session_id, issued_on, Some(seq))
+}
+
+fn insert(
+    conn: &Connection,
+    session_id: i64,
+    issued_on: NaiveDate,
+    seq: Option<u32>,
+) -> Result<Invoice> {
     let (patient_id, location_id, starts_at, fee_cents): (i64, i64, String, i64) = conn.query_row(
         "SELECT patient_id, location_id, starts_at, fee_cents FROM session WHERE id = ?1",
         [session_id],
@@ -377,11 +397,14 @@ pub(crate) fn issue(conn: &Connection, session_id: i64, issued_on: NaiveDate) ->
     }
 
     let (year, month) = (issued_on.year(), issued_on.month());
-    let seq: u32 = conn.query_row(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM invoice WHERE year = ?1 AND month = ?2",
-        params![year, month],
-        |r| r.get(0),
-    )?;
+    let seq: u32 = match seq {
+        Some(seq) => seq,
+        None => conn.query_row(
+            "SELECT COALESCE(MAX(seq), 0) + 1 FROM invoice WHERE year = ?1 AND month = ?2",
+            params![year, month],
+            |r| r.get(0),
+        )?,
+    };
     let number = format_number(year, month, seq);
     let practitioner_name = format!("{} {}", p.first_name, p.last_name);
     conn.execute(
