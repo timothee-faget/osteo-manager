@@ -3,10 +3,15 @@
 
 use std::path::Path;
 
+use std::collections::HashMap;
+
 use calamine::{Data, Reader, open_workbook_auto};
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::{Datelike, Duration, Local, NaiveDate};
+use rusqlite::{Connection, OptionalExtension, params};
 use unicode_normalization::UnicodeNormalization;
 
+use crate::invoices;
+use crate::patients::CLINICAL_HISTORY_TEMPLATE;
 use crate::session::SessionError;
 
 type Result<T> = std::result::Result<T, SessionError>;
@@ -277,6 +282,177 @@ pub fn merge(workbooks: &[Parsed]) -> Vec<Merged> {
     merged
 }
 
+/// Why a session was left out of an import.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Left {
+    NoAmount,
+    /// The cabinet has no practice location chosen for it.
+    UnknownCabinet,
+    /// Its invoice number is already used by another invoice.
+    NumberTaken,
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub struct Report {
+    pub imported: u32,
+    /// Skipped because a previous import already created them.
+    pub already_imported: u32,
+    /// Month and number of the sessions left out.
+    pub left_out: Vec<(u32, u32, Left)>,
+}
+
+fn timestamp() -> String {
+    Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
+}
+
+/// Writes the sessions with their patients, invoices (keeping the number of the sheet) and
+/// payments, all or nothing. `locations` maps a cabinet name to a practice location.
+/// Importing the same sessions again changes nothing.
+///
+/// Imported invoices count as already sent, and imported cheques as already deposited (one
+/// deposit per month): they are old, and must not show up as things left to do.
+pub fn apply(
+    conn: &mut Connection,
+    rows: &[SessionRow],
+    locations: &HashMap<String, i64>,
+) -> Result<Report> {
+    let tx = conn.transaction()?;
+    let mut report = Report::default();
+
+    let mut patients: HashMap<(String, String), i64> = HashMap::new();
+    {
+        let mut stmt = tx.prepare("SELECT id, last_name, first_name FROM patient")?;
+        let found = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        for found in found {
+            let (id, last, first) = found?;
+            patients.insert((normalize(&last), normalize(&first)), id);
+        }
+    }
+    let mut deposits: HashMap<(i32, u32), i64> = HashMap::new();
+
+    for row in rows {
+        let name = (normalize(&row.last_name), normalize(&row.first_name));
+        let key = format!("{}|{}|{}", row.date, name.0, name.1);
+        let left = |left| (row.month, row.number, left);
+
+        let imported: Option<i64> = tx
+            .query_row("SELECT 1 FROM import_item WHERE key = ?1", [&key], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        if imported.is_some() {
+            report.already_imported += 1;
+            continue;
+        }
+        let Some(amount) = row.amount_cents else {
+            report.left_out.push(left(Left::NoAmount));
+            continue;
+        };
+        let Some(&location_id) = locations.get(&row.cabinet) else {
+            report.left_out.push(left(Left::UnknownCabinet));
+            continue;
+        };
+        let taken: Option<i64> = tx
+            .query_row(
+                "SELECT 1 FROM invoice WHERE year = ?1 AND month = ?2 AND seq = ?3",
+                params![row.date.year(), row.date.month(), row.number],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if taken.is_some() {
+            report.left_out.push(left(Left::NumberTaken));
+            continue;
+        }
+
+        let patient_id = match patients.get(&name) {
+            Some(&id) => id,
+            None => {
+                tx.execute(
+                    "INSERT INTO patient (last_name, first_name, clinical_history, created_at,
+                        updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
+                    params![
+                        row.last_name,
+                        row.first_name,
+                        CLINICAL_HISTORY_TEMPLATE,
+                        timestamp()
+                    ],
+                )?;
+                let id = tx.last_insert_rowid();
+                patients.insert(name, id);
+                id
+            }
+        };
+
+        let day = row.date.format("%Y-%m-%d").to_string();
+        tx.execute(
+            "INSERT INTO session (patient_id, location_id, starts_at, reason, notes, fee_cents,
+                validated_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, '', '', ?4, ?5, ?6, ?6)",
+            params![
+                patient_id,
+                location_id,
+                format!("{day}T00:00"),
+                amount,
+                day,
+                timestamp()
+            ],
+        )?;
+        let session_id = tx.last_insert_rowid();
+        let invoice = invoices::issue_historical(&tx, session_id, row.date, row.number)?;
+        tx.execute(
+            "INSERT INTO invoice_sending (invoice_id, sent_at) VALUES (?1, ?2)",
+            params![invoice.id, format!("{day}T00:00:00")],
+        )?;
+
+        if let Some(method) = row.method {
+            let deposit_id = if method == "cheque" {
+                let month = (row.date.year(), row.date.month());
+                let id = match deposits.get(&month) {
+                    Some(&id) => {
+                        tx.execute(
+                            "UPDATE cheque_deposit SET deposited_on = MAX(deposited_on, ?2)
+                             WHERE id = ?1",
+                            params![id, day],
+                        )?;
+                        id
+                    }
+                    None => {
+                        tx.execute(
+                            "INSERT INTO cheque_deposit (deposited_on, created_at)
+                             VALUES (?1, ?2)",
+                            params![day, timestamp()],
+                        )?;
+                        let id = tx.last_insert_rowid();
+                        deposits.insert(month, id);
+                        id
+                    }
+                };
+                Some(id)
+            } else {
+                None
+            };
+            tx.execute(
+                "INSERT INTO payment (invoice_id, amount_cents, method, received_on, reference,
+                    created_at, deposit_id) VALUES (?1, ?2, ?3, ?4, '', ?5, ?6)",
+                params![invoice.id, amount, method, day, timestamp(), deposit_id],
+            )?;
+        }
+        tx.execute(
+            "INSERT INTO import_item (key, session_id, imported_at) VALUES (?1, ?2, ?3)",
+            params![key, session_id, timestamp()],
+        )?;
+        report.imported += 1;
+    }
+    tx.commit()?;
+    Ok(report)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +660,118 @@ mod tests {
         let merged = merge(&[file(vec![no_cabinet, clash])]);
         assert_eq!(merged[0].issues, [Issue::NoCabinet, Issue::NumberClash]);
         assert_eq!(merged[1].issues, [Issue::NumberClash]);
+    }
+
+    fn fixture_locations(f: &crate::test_support::Fixture) -> HashMap<String, i64> {
+        HashMap::from([("Cabinet A".to_string(), f.practice)])
+    }
+
+    #[test]
+    fn imports_a_paid_session_with_its_invoice() {
+        let mut f = crate::test_support::fixture();
+        let locations = fixture_locations(&f);
+        let rows = [row(2, 7, "Martin", "Jeanne")];
+        let report = apply(&mut f.conn, &rows, &locations).unwrap();
+        assert_eq!(report.imported, 1);
+
+        let (number, amount, patient, sent): (String, i64, String, bool) = f
+            .conn
+            .query_row(
+                "SELECT i.number, i.amount_cents, p.last_name,
+                    EXISTS (SELECT 1 FROM invoice_sending s WHERE s.invoice_id = i.id)
+                 FROM invoice i JOIN patient p ON p.id = i.patient_id",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (number.as_str(), amount, patient.as_str(), sent),
+            ("2026-03-007", 6000, "Martin", true)
+        );
+        let (method, received_on): (String, String) = f
+            .conn
+            .query_row("SELECT method, received_on FROM payment", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(
+            (method.as_str(), received_on.as_str()),
+            ("cash", "2026-03-02")
+        );
+    }
+
+    #[test]
+    fn importing_twice_changes_nothing() {
+        let mut f = crate::test_support::fixture();
+        let locations = fixture_locations(&f);
+        let rows = [row(2, 1, "Martin", "Jeanne"), row(5, 2, "Durand", "Paul")];
+        apply(&mut f.conn, &rows, &locations).unwrap();
+        let again = apply(&mut f.conn, &rows, &locations).unwrap();
+        assert_eq!((again.imported, again.already_imported), (0, 2));
+        let invoices: i64 = f
+            .conn
+            .query_row("SELECT count(*) FROM invoice", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(invoices, 2);
+    }
+
+    #[test]
+    fn reuses_an_existing_patient() {
+        let mut f = crate::test_support::fixture();
+        let locations = fixture_locations(&f);
+        let rows = [row(2, 1, "DUPONT", "anne")];
+        apply(&mut f.conn, &rows, &locations).unwrap();
+        let patients: i64 = f
+            .conn
+            .query_row("SELECT count(*) FROM patient", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(patients, 1);
+    }
+
+    #[test]
+    fn unpaid_sessions_have_no_payment_and_cheques_are_already_deposited() {
+        let mut f = crate::test_support::fixture();
+        let locations = fixture_locations(&f);
+        let mut unpaid = row(2, 1, "Martin", "Jeanne");
+        unpaid.method = None;
+        let mut cheque = row(9, 2, "Durand", "Paul");
+        cheque.method = Some("cheque");
+        apply(&mut f.conn, &[unpaid, cheque], &locations).unwrap();
+        let (payments, pending): (i64, i64) = f
+            .conn
+            .query_row(
+                "SELECT count(*), count(*) FILTER (WHERE deposit_id IS NULL) FROM payment",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((payments, pending), (1, 0));
+    }
+
+    #[test]
+    fn leaves_out_what_it_cannot_import() {
+        let mut f = crate::test_support::fixture();
+        let locations = fixture_locations(&f);
+        let mut no_amount = row(2, 1, "Martin", "Jeanne");
+        no_amount.amount_cents = None;
+        let mut elsewhere = row(3, 2, "Durand", "Paul");
+        elsewhere.cabinet = "Inconnu".into();
+        let first = row(4, 3, "Petit", "Zoé");
+        let clash = row(5, 3, "Grand", "Léa");
+        let report = apply(
+            &mut f.conn,
+            &[no_amount, elsewhere, first, clash],
+            &locations,
+        )
+        .unwrap();
+        assert_eq!(report.imported, 1);
+        assert_eq!(
+            report.left_out,
+            [
+                (3, 1, Left::NoAmount),
+                (3, 2, Left::UnknownCabinet),
+                (3, 3, Left::NumberTaken),
+            ]
+        );
     }
 }
